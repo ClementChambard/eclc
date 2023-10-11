@@ -1,3 +1,5 @@
+use crate::error::Error;
+
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -8,16 +10,21 @@ pub struct Ecl {
 }
 
 impl Ecl {
-    pub fn process(&mut self) {
+    pub fn process(&mut self) -> Result<(), Error> {
         for s in &mut self.subs {
-            s.process();
+            s.process()?;
         }
+        Ok(())
     }
 }
 
-fn resolve_ecl(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
-    assert!(typ.is_empty());
-    assert!(args.len() == 3);
+fn resolve_ecl(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+    if !typ.is_empty() {
+        return Err(Error::Grammar("Ecl command has no subcommands".to_owned()));
+    }
+    if args.len() != 3 {
+        return Err(Error::Grammar("Ecl commands takes 3 params".to_owned()));
+    }
     let ecli = args[0]
         .clone()
         .list()
@@ -36,7 +43,7 @@ fn resolve_ecl(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
         .into_iter()
         .map(|n| n.sub())
         .collect();
-    AstNode::Ecl(Ecl { ecli, anmi, subs })
+    Ok(AstNode::Ecl(Ecl { ecli, anmi, subs }))
 }
 
 pub fn fill_executor(resolver: &mut AstResolver<AstNode>) {

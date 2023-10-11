@@ -1,6 +1,6 @@
 ! Simple Ecl Grammar !
 
-! symbols '{' '}' and '|' are forbidden as raw tokens and must be renamed
+! symbols '{' and '}' are forbidden as raw tokens and must be renamed
 ! for some reason, the lexer will match the last token declared if there are multiple possibilities
 
 !token EOF $

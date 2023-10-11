@@ -18,6 +18,7 @@ pub use node::AstNode;
 pub use sub::{Param, Sub};
 pub use token::Token;
 
+use crate::error::Error;
 use crate::parser::ast::AstResolver;
 
 pub fn fill_executor(resolver: &mut AstResolver<AstNode>) {

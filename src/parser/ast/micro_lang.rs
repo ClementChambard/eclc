@@ -1,4 +1,6 @@
-use super::{Node, AstResolver, NeededForAstNode};
+use crate::error::Error;
+
+use super::{AstResolver, NeededForAstNode, Node};
 
 #[derive(Debug, Clone)]
 pub enum AstDef {
@@ -14,29 +16,42 @@ pub enum Der {
 }
 
 impl Der {
-    pub fn execute<N: NeededForAstNode>(&self, resolver: &AstResolver<N>, children: &Vec<Node>, params: &Vec<N>) -> N {
+    pub fn execute<N: NeededForAstNode>(
+        &self,
+        resolver: &AstResolver<N>,
+        children: &Vec<Node>,
+        params: &Vec<N>,
+    ) -> Result<N, Error> {
         match self {
-            Self::Child(n) => {
-                resolver.resolve(&children[*n], &vec![])
-            },
+            Self::Child(n) => resolver.resolve(&children[*n], &vec![]),
             Self::ChildDer(n, par) => {
-                resolver.resolve(&children[*n], &par.iter().map(|p| p.execute(resolver, children, params)).collect())
-            },
-            Self::Param(n) => {
-                params[*n].clone()
-            },
+                let tmp: Result<Vec<N>, Error> = par
+                    .iter()
+                    .map(|p| p.execute(resolver, children, params))
+                    .collect();
+                resolver.resolve(&children[*n], &tmp?)
+            }
+            Self::Param(n) => Ok(params[*n].clone()),
         }
     }
 }
 
 impl AstDef {
-    pub fn execute<N: NeededForAstNode>(&self, resolver: &AstResolver<N>, children: &Vec<Node>, params: &Vec<N>) -> N {
+    pub fn execute<N: NeededForAstNode>(
+        &self,
+        resolver: &AstResolver<N>,
+        children: &Vec<Node>,
+        params: &Vec<N>,
+    ) -> Result<N, Error> {
         match self {
             Self::Der(d) => d.execute(resolver, children, params),
             Self::Fun(fun_name, par) => {
-                let par = par.iter().map(|p|  p.execute(resolver, children, params)).collect();
-                resolver.executor.exec(fun_name, &par)
-            },
+                let par: Result<Vec<N>, Error> = par
+                    .iter()
+                    .map(|p| p.execute(resolver, children, params))
+                    .collect();
+                resolver.executor.exec(fun_name, &par?)
+            }
         }
     }
 }
@@ -62,7 +77,7 @@ pub fn parse_ast_def(s: &str) -> AstDef {
     let mut it = s.chars();
     assert!(it.next() == Some('{'));
     let s = &s[1..].eat_spaces();
-    let AstDefResult{res, next_str: s} = parse_ast_def_in(s);
+    let AstDefResult { res, next_str: s } = parse_ast_def_in(s);
     let s = s.eat_spaces();
     assert!(s.len() == 1 && s.chars().next() == Some('}'));
     res
@@ -102,7 +117,7 @@ fn parse_ast_fun<'a>(s: &'a str) -> AstFunResult<'a> {
     let mut out: Vec<String> = Vec::new();
     let mut st = s;
     loop {
-        let IdentResult{res, next_str} = read_ident(st);
+        let IdentResult { res, next_str } = read_ident(st);
         out.push(res);
         st = next_str.eat_spaces();
         if st.starts_with("::") {
@@ -111,7 +126,10 @@ fn parse_ast_fun<'a>(s: &'a str) -> AstFunResult<'a> {
             break;
         }
     }
-    AstFunResult{ res: out, next_str: st }
+    AstFunResult {
+        res: out,
+        next_str: st,
+    }
 }
 
 fn get_num(s: &str) -> (usize, usize) {
@@ -139,33 +157,62 @@ fn parse_ast_def_in<'a>(s: &'a str) -> AstDefResult<'a> {
             let s = s.strip_prefix("param").unwrap();
             let (val, len) = get_num(s);
             let s = &s[len..].eat_spaces();
-            AstDefResult{res: AstDef::Der(Der::Param(val)), next_str: s}
+            AstDefResult {
+                res: AstDef::Der(Der::Param(val)),
+                next_str: s,
+            }
         } else {
             let (val, len) = get_num(s);
             let s = &s[len..].eat_spaces();
             if s.chars().next() == Some('.') {
                 let s = &s[1..].eat_spaces();
-                if !s.starts_with("derive") { panic!("should derive after '.'"); }
+                if !s.starts_with("derive") {
+                    panic!("should derive after '.'");
+                }
                 let s = s.strip_prefix("derive").unwrap().eat_spaces();
                 assert!(s.chars().next() == Some('('));
                 let s = &s[1..].eat_spaces();
-                let AstParamsResult{res: params, next_str: s} = parse_ast_params(s);
+                let AstParamsResult {
+                    res: params,
+                    next_str: s,
+                } = parse_ast_params(s);
                 assert!(s.chars().next() == Some(')'));
-                AstDefResult{res: AstDef::Der(Der::ChildDer(val, params)), next_str: &s[1..].eat_spaces()}
+                AstDefResult {
+                    res: AstDef::Der(Der::ChildDer(val, params)),
+                    next_str: &s[1..].eat_spaces(),
+                }
             } else {
-                AstDefResult{res: AstDef::Der(Der::Child(val)), next_str: s}
+                AstDefResult {
+                    res: AstDef::Der(Der::Child(val)),
+                    next_str: s,
+                }
             }
         }
     } else {
-        let AstFunResult{res: fun, next_str: s} = parse_ast_fun(s);
+        let AstFunResult {
+            res: fun,
+            next_str: s,
+        } = parse_ast_fun(s);
         assert!(s.chars().next() == Some('('));
         let s = &s[1..].eat_spaces();
-        let AstParamsResult{res: params, next_str: s} = parse_ast_params(s);
+        let AstParamsResult {
+            res: params,
+            next_str: s,
+        } = parse_ast_params(s);
         assert!(s.chars().next() == Some(')'));
-        AstDefResult{res: AstDef::Fun(fun, params.into_iter().map(|p| match p {
-            AstDef::Der(d) => d,
-            _ => panic!("Should be der"),
-        }).collect()), next_str: &s[1..].eat_spaces()}
+        AstDefResult {
+            res: AstDef::Fun(
+                fun,
+                params
+                    .into_iter()
+                    .map(|p| match p {
+                        AstDef::Der(d) => d,
+                        _ => panic!("Should be der"),
+                    })
+                    .collect(),
+            ),
+            next_str: &s[1..].eat_spaces(),
+        }
     }
 }
 
@@ -178,10 +225,13 @@ fn parse_ast_params<'a>(s: &'a str) -> AstParamsResult<'a> {
     let mut out: Vec<AstDef> = Vec::new();
     let mut st = s;
     if st.starts_with(')') {
-        return AstParamsResult{ res: out, next_str: st };
+        return AstParamsResult {
+            res: out,
+            next_str: st,
+        };
     }
     loop {
-        let AstDefResult{res, next_str} = parse_ast_def_in(st);
+        let AstDefResult { res, next_str } = parse_ast_def_in(st);
         out.push(res);
         st = next_str.eat_spaces();
         if st.starts_with(",") {
@@ -190,5 +240,8 @@ fn parse_ast_params<'a>(s: &'a str) -> AstParamsResult<'a> {
             break;
         }
     }
-    AstParamsResult{ res: out, next_str: st }
+    AstParamsResult {
+        res: out,
+        next_str: st,
+    }
 }

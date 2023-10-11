@@ -5,6 +5,9 @@ use crate::lexer::Token;
 pub enum Error {
     IO(std::io::Error),
     Simple(String),
+    BackEnd(String),
+    Grammar(String),
+    ShouldNeverBeThere,
 }
 
 pub fn report_error(tok: &Token<&str>, cf: &SourceFile, text: &str) {

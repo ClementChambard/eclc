@@ -36,7 +36,7 @@ impl AstNode {
 }
 
 impl NeededForAstNode for AstNode {
-    fn from_token(tok: &crate::lexer::Token<&str>) -> Self {
-        Self::Token(Token::from(tok))
+    fn from_token(tok: &crate::lexer::Token<&str>) -> Result<Self, Error> {
+        Ok(Self::Token(Token::from(tok)))
     }
 }

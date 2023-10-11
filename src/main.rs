@@ -37,12 +37,12 @@ fn main() -> Result<(), Error> {
             &parser::parse(&grammar, lexer.tokens(&src), "Ecl")
                 .ok_or(Error::Simple("Could not parse node: Aborting".to_owned()))?,
             &vec![],
-        )
+        )?
         .ecl();
     println!("{:#?}", node);
 
     // Process code for binary generation
-    node.process();
+    node.process()?;
     println!("{:#?}", node);
 
     // generate binary

@@ -46,7 +46,13 @@ pub fn enum_unwrap(input: TokenStream) -> TokenStream {
             let method_name = variant_name.to_string().to_snake_case();
             let method_name = Ident::new(&method_name, variant_name.span());
             if let Fields::Unnamed(fields) = &variant.fields {
-                if fields.unnamed.is_empty() { continue; }
+                let method_name2 = Ident::new(
+                    &format!("{}_or", method_name.to_string()),
+                    variant_name.span(),
+                );
+                if fields.unnamed.is_empty() {
+                    continue;
+                }
                 if fields.unnamed.len() == 1 {
                     let unnamed = &fields.unnamed;
                     generated_methods.extend(quote! {
@@ -55,6 +61,14 @@ pub fn enum_unwrap(input: TokenStream) -> TokenStream {
                                 inner
                             } else {
                                 panic!();
+                            }
+                        }
+
+                        pub fn #method_name2<T>(self, err: T) -> Result<#unnamed, T> {
+                            if let Self::#variant_name(inner) = self {
+                                Ok(inner)
+                            } else {
+                                Err(err)
                             }
                         }
                     });
@@ -70,6 +84,14 @@ pub fn enum_unwrap(input: TokenStream) -> TokenStream {
                                 (#inner)
                             } else {
                                 panic!();
+                            }
+                        }
+
+                        pub fn #method_name2<T>(self, err: T) -> Result<#fields, T> {
+                            if let Self::#variant_name(#inner) = self {
+                                Ok((#inner))
+                            } else {
+                                Err(err)
                             }
                         }
                     });

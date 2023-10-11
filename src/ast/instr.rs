@@ -1,3 +1,5 @@
+use crate::error::Error;
+
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -27,6 +29,30 @@ pub enum Instr {
 }
 
 impl Instr {
+    pub fn signature(&self) -> Result<String, Error> {
+        match self {
+            Self::Call(n, e) => {
+                let mut s = n.clone();
+                s.push('(');
+                for (i, ex) in e.iter().enumerate() {
+                    if i != 0 {
+                        s.push_str(", ");
+                    }
+                    match ex.get_type().unwrap() {
+                        ExprType::Int => s.push_str("int"),
+                        ExprType::Float => s.push_str("float"),
+                        ExprType::String => s.push_str("str"),
+                    }
+                }
+                s.push(')');
+                Ok(s)
+            }
+            _ => Err(Error::BackEnd(
+                "Can't get signature of non inscall Instr".to_owned(),
+            )),
+        }
+    }
+
     pub fn size(&self) -> usize {
         match self {
             Self::Label(_) => 0,
@@ -51,11 +77,11 @@ impl Instr {
     }
 }
 
-fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
+fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
     assert!(typ.len() == 1 || typ.len() == 2);
     let typ0 = &typ[0];
-    AstNode::Instr(match &typ0[..] {
-        "None" => return AstNode::None,
+    Ok(AstNode::Instr(match &typ0[..] {
+        "None" => return Ok(AstNode::None),
         "InstrSub" => {
             assert!(args.len() == 2);
             let id = args[0].clone().token().id();
@@ -63,6 +89,13 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             match &dtype[..] {
                 "InstrSub::Call" => {
                     assert!(children.len() == 1);
+                    if id.starts_with("ins_") {
+                        let num = id.strip_prefix("ins_").unwrap();
+                        match num.parse::<u16>() {
+                            Ok(_) => {}
+                            Err(_) => panic!("instruction {} does not exist", id),
+                        }
+                    }
                     Instr::Call(
                         id,
                         children[0]
@@ -217,17 +250,17 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             match &typ1[..] {
                 "Some" => {
                     assert!(args.len() == 1);
-                    return AstNode::Data {
+                    return Ok(AstNode::Data {
                         dtype: "Else::Some".to_string(),
                         children: args.clone(),
-                    };
+                    });
                 }
                 "None" => {
                     assert!(args.len() == 0);
-                    return AstNode::Data {
+                    return Ok(AstNode::Data {
                         dtype: "Else::None".to_string(),
                         children: vec![],
-                    };
+                    });
                 }
                 f => panic!("Unknown Else command {f}"),
             }
@@ -288,25 +321,28 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             Instr::VarFloat(args[0].clone().token().id(), e)
         }
         f => {
-            panic!("Unknown Instr command {f}");
+            return Err(Error::Grammar(format!("Unknown Instr command {f}")));
         }
-    })
+    }))
 }
 
-fn resolve_instrsub(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
-    assert!(typ.len() == 1);
+fn resolve_instrsub(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+    if typ.len() != 1 {
+        return Err(Error::Grammar("InstrSub takes 1 subcommand".to_owned()));
+    }
     let typ = &typ[0];
-    assert!(
-        &typ[..] == "Call"
-            || &typ[..] == "Label"
-            || &typ[..] == "Affect"
-            || &typ[..] == "None"
-            || &typ[..] == "Async"
-    );
-    AstNode::Data {
+    if !(&typ[..] == "Call"
+        || &typ[..] == "Label"
+        || &typ[..] == "Affect"
+        || &typ[..] == "None"
+        || &typ[..] == "Async")
+    {
+        return Err(Error::Grammar(format!("InstrSub unknown subcommand {typ}")));
+    }
+    Ok(AstNode::Data {
         dtype: format!("InstrSub::{}", &typ[..]),
         children: args.to_vec(),
-    }
+    })
 }
 
 pub fn fill_executor(resolver: &mut AstResolver<AstNode>) {

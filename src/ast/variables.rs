@@ -1,3 +1,5 @@
+use crate::error::Error;
+
 use super::*;
 
 #[derive(Clone)]
@@ -58,14 +60,17 @@ impl Scope {
         }
     }
 
-    pub fn pop_scope(mut self) -> Self {
+    pub fn pop_scope(mut self) -> Result<Self, Error> {
         assert!(!self.parent_scope.is_empty());
-        let mut s = self.parent_scope.pop().unwrap();
+        let mut s = self
+            .parent_scope
+            .pop()
+            .ok_or(Error::BackEnd("Scope has no parent".to_owned()))?;
         s.max_offset = self.max_offset;
-        s
+        Ok(s)
     }
 
-    pub fn add_var(&mut self, v: &str, int_1_float_2: i8) {
+    pub fn add_var(&mut self, v: &str, int_1_float_2: i8) -> Result<(), Error> {
         let o = self.local_max_offset;
         self.local_max_offset += 4;
         if self.local_max_offset > self.max_offset {
@@ -77,16 +82,17 @@ impl Scope {
             Variable::Float(o as f32, v.to_string())
         };
         if self.variables.iter().find(|va| va.name() == v).is_some() {
-            panic!("Variable {v} already exists");
+            return Err(Error::Simple(format!("Variable {v} already exists")));
         }
         self.variables.push(var);
+        Ok(())
     }
 
-    pub fn assign(&self, v: &str, expr: &Expr) -> Vec<Instr> {
-        let var = self
-            .get_var(v)
-            .expect("Variable doesn't exist for assignment");
-        vec![Instr::PushExpr(expr.clone()), var.pop_instr()]
+    pub fn assign(&self, v: &str, expr: &Expr) -> Result<Vec<Instr>, Error> {
+        let var = self.get_var(v).ok_or(Error::Simple(format!(
+            "Variable {v} doesn't exist for assignment"
+        )))?;
+        Ok(vec![Instr::PushExpr(expr.clone()), var.pop_instr()])
     }
 
     pub fn get_var<'a>(&'a self, name: &str) -> Option<&'a Variable> {
@@ -137,7 +143,7 @@ pub fn replace_in_expr(scope: &Scope, e: &mut Expr) {
     }
 }
 
-pub fn replace_in_bloc(scope: &mut Scope, ins: &Vec<Instr>) -> Vec<Instr> {
+pub fn replace_in_bloc(scope: &mut Scope, ins: &Vec<Instr>) -> Result<Vec<Instr>, Error> {
     let mut new_ins = Vec::new();
     for i in ins {
         match i {
@@ -161,71 +167,71 @@ pub fn replace_in_bloc(scope: &mut Scope, ins: &Vec<Instr>) -> Vec<Instr> {
             }
             Instr::Bloc(l) => {
                 let mut new_scope = scope.push_scope();
-                let new_l = replace_in_bloc(&mut new_scope, l);
-                *scope = new_scope.pop_scope();
+                let new_l = replace_in_bloc(&mut new_scope, l)?;
+                *scope = new_scope.pop_scope()?;
                 new_ins.extend(new_l);
             }
             Instr::Loop(l) => {
                 let mut new_scope = scope.push_scope();
-                let new_l = replace_in_bloc(&mut new_scope, l);
-                *scope = new_scope.pop_scope();
+                let new_l = replace_in_bloc(&mut new_scope, l)?;
+                *scope = new_scope.pop_scope()?;
                 new_ins.push(Instr::Loop(new_l));
             }
             Instr::If(e, l1, l2) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
                 let mut new_scope = scope.push_scope();
-                let new_l1 = replace_in_bloc(&mut new_scope, l1);
-                *scope = new_scope.pop_scope();
+                let new_l1 = replace_in_bloc(&mut new_scope, l1)?;
+                *scope = new_scope.pop_scope()?;
                 let mut new_scope = scope.push_scope();
-                let new_l2 = replace_in_bloc(&mut new_scope, l2);
-                *scope = new_scope.pop_scope();
+                let new_l2 = replace_in_bloc(&mut new_scope, l2)?;
+                *scope = new_scope.pop_scope()?;
                 new_ins.push(Instr::If(new_e, new_l1, new_l2));
             }
             Instr::While(e, l) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
                 let mut new_scope = scope.push_scope();
-                let new_l = replace_in_bloc(&mut new_scope, l);
-                *scope = new_scope.pop_scope();
+                let new_l = replace_in_bloc(&mut new_scope, l)?;
+                *scope = new_scope.pop_scope()?;
                 new_ins.push(Instr::While(new_e, new_l));
             }
             Instr::DoWhile(e, l) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
                 let mut new_scope = scope.push_scope();
-                let new_l = replace_in_bloc(&mut new_scope, l);
-                *scope = new_scope.pop_scope();
+                let new_l = replace_in_bloc(&mut new_scope, l)?;
+                *scope = new_scope.pop_scope()?;
                 new_ins.push(Instr::DoWhile(new_e, new_l));
             }
             Instr::Affect(v, e) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
-                new_ins.extend(scope.assign(v, &new_e));
+                new_ins.extend(scope.assign(v, &new_e)?);
             }
             Instr::VarInt(v, e_opt) => {
-                scope.add_var(v, 1);
+                scope.add_var(v, 1)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v, &new_e))
+                        new_ins.extend(scope.assign(v, &new_e)?);
                     }
                     None => {}
                 }
             }
             Instr::VarFloat(v, e_opt) => {
-                scope.add_var(v, 2);
+                scope.add_var(v, 2)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v, &new_e))
+                        new_ins.extend(scope.assign(v, &new_e)?);
                     }
                     None => {}
                 }
             }
         }
     }
-    new_ins
+    Ok(new_ins)
 }

@@ -1,32 +1,38 @@
+use crate::error::Error;
+
 use super::*;
 
-pub fn desugar_bloc(sub: &Sub, bloc: &Vec<Instr>, lbl_seed: &mut usize) -> Vec<Instr> {
+pub fn desugar_bloc(
+    sub: &Sub,
+    bloc: &Vec<Instr>,
+    lbl_seed: &mut usize,
+) -> Result<Vec<Instr>, Error> {
     let mut new_instructions = Vec::new();
     for i in bloc {
         match i {
             Instr::If(cond, if_bloc, else_bloc) => {
-                let if_code = desugar(sub, cond, if_bloc, else_bloc, lbl_seed);
+                let if_code = desugar(sub, cond, if_bloc, else_bloc, lbl_seed)?;
                 new_instructions.extend(if_code);
             }
             Instr::Bloc(l) => {
-                new_instructions.extend(desugar_bloc(sub, l, lbl_seed));
+                new_instructions.extend(desugar_bloc(sub, l, lbl_seed)?);
             }
             Instr::Loop(l) => {
-                let loop_code = desugar_bloc(sub, l, lbl_seed);
+                let loop_code = desugar_bloc(sub, l, lbl_seed)?;
                 new_instructions.push(Instr::Loop(loop_code));
             }
             Instr::While(e, l) => {
-                let loop_code = desugar_bloc(sub, l, lbl_seed);
+                let loop_code = desugar_bloc(sub, l, lbl_seed)?;
                 new_instructions.push(Instr::While(e.clone(), loop_code));
             }
             Instr::DoWhile(e, l) => {
-                let loop_code = desugar_bloc(sub, l, lbl_seed);
+                let loop_code = desugar_bloc(sub, l, lbl_seed)?;
                 new_instructions.push(Instr::DoWhile(e.clone(), loop_code));
             }
             _ => new_instructions.push(i.clone()),
         }
     }
-    new_instructions
+    Ok(new_instructions)
 }
 
 pub fn desugar(
@@ -35,16 +41,16 @@ pub fn desugar(
     if_bloc: &Vec<Instr>,
     else_bloc: &Vec<Instr>,
     lbl_seed: &mut usize,
-) -> Vec<Instr> {
-    let if_bloc = desugar_bloc(sub, if_bloc, lbl_seed);
-    let else_bloc = desugar_bloc(sub, else_bloc, lbl_seed);
+) -> Result<Vec<Instr>, Error> {
+    let if_bloc = desugar_bloc(sub, if_bloc, lbl_seed)?;
+    let else_bloc = desugar_bloc(sub, else_bloc, lbl_seed)?;
     let else_bloc_empty = else_bloc.is_empty();
     let mut new_instructions = Vec::new();
     let mut e = cond.clone();
-    e.anotate();
+    e.anotate()?;
     e.constant_fold();
-    if e.get_type() != ExprType::Int {
-        panic!("If condition must be Int");
+    if e.get_type()? != ExprType::Int {
+        return Err(Error::Simple("If condition must be Int".to_owned()));
     }
     if e.is_primitive() && !e.is_var() {
         let i = e.int();
@@ -53,7 +59,7 @@ pub fn desugar(
         } else {
             new_instructions.extend(else_bloc);
         }
-        return new_instructions;
+        return Ok(new_instructions);
     }
     new_instructions.push(Instr::PushExpr(cond.clone()));
     let else_label = sub.gen_label(lbl_seed);
@@ -80,5 +86,5 @@ pub fn desugar(
         new_instructions.extend(else_bloc);
         new_instructions.push(Instr::Label(endif_label));
     }
-    new_instructions
+    Ok(new_instructions)
 }

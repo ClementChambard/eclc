@@ -1,3 +1,5 @@
+use crate::error::Error;
+
 use super::*;
 
 use magic_unwrapper::EnumUnwrap;
@@ -247,8 +249,8 @@ impl Expr {
         }
     }
 
-    pub fn get_type(&self) -> ExprType {
-        match self {
+    pub fn get_type(&self) -> Result<ExprType, Error> {
+        Ok(match self {
             Expr::Int(_) => ExprType::Int,
             Expr::VarInt(_) => ExprType::Int,
             Expr::Float(_) => ExprType::Float,
@@ -277,21 +279,29 @@ impl Expr {
             | Expr::Sqrt(_, Some(a)) => a.expr_type,
             Expr::Id(_) => ExprType::Int, // unaffected id can only be label at this point so it's
             // an int
-            _ => panic!("Can't know type of unanotated node"),
-        }
+            _ => {
+                return Err(Error::Simple(
+                    "Can't know type of unanotated node".to_owned(),
+                ))
+            }
+        })
     }
 
-    pub fn anotate(&mut self) {
+    pub fn anotate(&mut self) -> Result<(), Error> {
         match self {
             Expr::Add(l, r, ref mut a)
             | Expr::Sub(l, r, ref mut a)
             | Expr::Mul(l, r, ref mut a)
             | Expr::Div(l, r, ref mut a) => {
-                l.anotate();
-                r.anotate();
-                let l_type = l.get_type();
-                let r_type = r.get_type();
-                assert!(l_type == r_type);
+                l.anotate()?;
+                r.anotate()?;
+                let l_type = l.get_type()?;
+                let r_type = r.get_type()?;
+                if l_type != r_type {
+                    return Err(Error::Simple(
+                        "Params of operation are expected to be the same type".to_owned(),
+                    ));
+                }
                 *a = Some(ExprAnnotation { expr_type: l_type })
             }
             Expr::Modulo(l, r, ref mut a)
@@ -300,12 +310,20 @@ impl Expr {
             | Expr::Xor(l, r, ref mut a)
             | Expr::And(l, r, ref mut a)
             | Expr::Or(l, r, ref mut a) => {
-                l.anotate();
-                r.anotate();
-                let l_type = l.get_type();
-                let r_type = r.get_type();
-                assert!(l_type == r_type);
-                assert!(l_type == ExprType::Int);
+                l.anotate()?;
+                r.anotate()?;
+                let l_type = l.get_type()?;
+                let r_type = r.get_type()?;
+                if l_type != r_type {
+                    return Err(Error::Simple(
+                        "Params of binary operation are expected to be the same type".to_owned(),
+                    ));
+                }
+                if l_type != ExprType::Int {
+                    return Err(Error::Simple(
+                        "Params of binary operation are expected to be of type int".to_owned(),
+                    ));
+                }
                 *a = Some(ExprAnnotation { expr_type: l_type })
             }
             Expr::Gt(l, r, ref mut a)
@@ -314,39 +332,48 @@ impl Expr {
             | Expr::Le(l, r, ref mut a)
             | Expr::Eq(l, r, ref mut a)
             | Expr::Ne(l, r, ref mut a) => {
-                l.anotate();
-                r.anotate();
-                let l_type = l.get_type();
-                let r_type = r.get_type();
-                assert!(l_type == r_type);
+                l.anotate()?;
+                r.anotate()?;
+                let l_type = l.get_type()?;
+                let r_type = r.get_type()?;
+                if l_type != r_type {
+                    return Err(Error::Simple(
+                        "Params of comparison are expected to be the same type".to_owned(),
+                    ));
+                }
                 *a = Some(ExprAnnotation {
                     expr_type: ExprType::Int,
                 })
             }
             Expr::Uminus(l, ref mut a) => {
-                l.anotate();
+                l.anotate()?;
                 *a = Some(ExprAnnotation {
-                    expr_type: l.get_type(),
+                    expr_type: l.get_type()?,
                 })
             }
             Expr::Not(l, ref mut a) => {
-                l.anotate();
+                l.anotate()?;
                 *a = Some(ExprAnnotation {
                     expr_type: ExprType::Int,
                 })
             }
             Expr::Sqrt(l, ref mut a) | Expr::Sin(l, ref mut a) | Expr::Cos(l, ref mut a) => {
-                l.anotate();
-                assert!(l.get_type() == ExprType::Float);
+                l.anotate()?;
+                if l.get_type()? != ExprType::Float {
+                    return Err(Error::Simple(
+                        "Param of Sqrt, Sin, or Cos is expected to be a float".to_owned(),
+                    ));
+                }
                 *a = Some(ExprAnnotation {
                     expr_type: ExprType::Float,
                 })
             }
             _ => {}
         }
+        Ok(())
     }
 
-    pub fn instructions(&self) -> Vec<Instr> {
+    pub fn instructions(&self) -> Result<Vec<Instr>, Error> {
         let mut instructions = Vec::new();
         match self {
             Self::Int(_) => {
@@ -362,24 +389,24 @@ impl Expr {
                 instructions.push(Instr::Call("ins_43".to_string(), vec![self.clone()]));
             }
             Self::Uminus(e, Some(a)) => {
-                instructions.extend(e.instructions());
+                instructions.extend(e.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_83".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_84".to_string(), vec![])),
                     _ => panic!("Can't negate a non number"),
                 }
             }
-            Self::Not(e, Some(_)) => {
-                instructions.extend(e.instructions());
-                match e.get_type() {
+            Self::Not(e, Some(a)) => {
+                instructions.extend(e.instructions()?);
+                match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_71".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_72".to_string(), vec![])),
                     _ => panic!("Can't not a non number"),
                 }
             }
             Self::Add(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_50".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_51".to_string(), vec![])),
@@ -387,8 +414,8 @@ impl Expr {
                 }
             }
             Self::Sub(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_52".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_53".to_string(), vec![])),
@@ -396,8 +423,8 @@ impl Expr {
                 }
             }
             Self::Mul(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_54".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_55".to_string(), vec![])),
@@ -405,8 +432,8 @@ impl Expr {
                 }
             }
             Self::Div(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_56".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_57".to_string(), vec![])),
@@ -414,8 +441,8 @@ impl Expr {
                 }
             }
             Self::Gt(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_67".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_68".to_string(), vec![])),
@@ -423,8 +450,8 @@ impl Expr {
                 }
             }
             Self::Ge(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_69".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_70".to_string(), vec![])),
@@ -432,8 +459,8 @@ impl Expr {
                 }
             }
             Self::Lt(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_63".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_64".to_string(), vec![])),
@@ -441,8 +468,8 @@ impl Expr {
                 }
             }
             Self::Le(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_65".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_66".to_string(), vec![])),
@@ -450,8 +477,8 @@ impl Expr {
                 }
             }
             Self::Eq(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_59".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_60".to_string(), vec![])),
@@ -459,8 +486,8 @@ impl Expr {
                 }
             }
             Self::Ne(e1, e2, Some(a)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 match a.expr_type {
                     ExprType::Int => instructions.push(Instr::Call("ins_61".to_string(), vec![])),
                     ExprType::Float => instructions.push(Instr::Call("ins_62".to_string(), vec![])),
@@ -468,45 +495,45 @@ impl Expr {
                 }
             }
             Self::Modulo(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_58".to_string(), vec![]));
             }
             Self::BinAnd(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_77".to_string(), vec![]));
             }
             Self::Xor(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_75".to_string(), vec![]));
             }
             Self::BinOr(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_76".to_string(), vec![]));
             }
             Self::Or(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_73".to_string(), vec![]));
             }
             Self::And(e1, e2, Some(_)) => {
-                instructions.extend(e1.instructions());
-                instructions.extend(e2.instructions());
+                instructions.extend(e1.instructions()?);
+                instructions.extend(e2.instructions()?);
                 instructions.push(Instr::Call("ins_74".to_string(), vec![]));
             }
             Self::Sin(e, Some(_)) => {
-                instructions.extend(e.instructions());
+                instructions.extend(e.instructions()?);
                 instructions.push(Instr::Call("ins_79".to_string(), vec![]));
             }
             Self::Cos(e, Some(_)) => {
-                instructions.extend(e.instructions());
+                instructions.extend(e.instructions()?);
                 instructions.push(Instr::Call("ins_80".to_string(), vec![]));
             }
             Self::Sqrt(e, Some(_)) => {
-                instructions.extend(e.instructions());
+                instructions.extend(e.instructions()?);
                 instructions.push(Instr::Call("ins_88".to_string(), vec![]));
             }
             Self::Id(i) => panic!("Unresolved identifier {i}"),
@@ -516,7 +543,7 @@ impl Expr {
                 self
             ),
         }
-        instructions
+        Ok(instructions)
     }
 
     pub fn is_var(&self) -> bool {
@@ -586,29 +613,44 @@ impl Expr {
     }
 }
 
-fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
+fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
     use Expr as E;
     assert!(typ.len() == 1);
     let typ = &typ[0];
-    AstNode::Expr(match &typ[..] {
+    Ok(AstNode::Expr(match &typ[..] {
         "Int" => {
-            assert!(args.len() == 1);
-            E::Int(args[0].clone().token().int())
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Int takes 1 param".to_owned()));
+            }
+            E::Int(
+                args[0]
+                    .clone()
+                    .token_or(Error::Grammar("Expr::Int takes an int".to_owned()))?
+                    .int_or(Error::Grammar("Expr::Int takes an int".to_owned()))?,
+            )
         }
         "Float" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Float takes 1 param".to_owned()));
+            }
             E::Float(args[0].clone().token().float())
         }
         "Str" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Str takes 1 param".to_owned()));
+            }
             E::Str(args[0].clone().token().strn())
         }
         "Id" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Id takes 2 param".to_owned()));
+            }
             E::Id(args[0].clone().token().id())
         }
         "Add" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Add takes 2 param".to_owned()));
+            }
             E::Add(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -616,7 +658,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Sub" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Sub takes 2 param".to_owned()));
+            }
             E::Sub(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -624,7 +668,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Mul" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Mul takes 2 param".to_owned()));
+            }
             E::Mul(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -632,7 +678,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Div" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Div takes 2 param".to_owned()));
+            }
             E::Div(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -640,7 +688,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Mod" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Mod takes 2 param".to_owned()));
+            }
             E::Modulo(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -648,7 +698,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Gt" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Gt takes 2 param".to_owned()));
+            }
             E::Gt(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -656,7 +708,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Ge" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Ge takes 2 param".to_owned()));
+            }
             E::Ge(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -664,7 +718,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Lt" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Lt takes 2 param".to_owned()));
+            }
             E::Lt(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -672,7 +728,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Le" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Le takes 2 param".to_owned()));
+            }
             E::Le(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -681,6 +739,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
         }
         "Eq" => {
             assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Ne takes 2 param".to_owned()));
+            }
             E::Eq(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -688,7 +749,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Ne" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Ne takes 2 param".to_owned()));
+            }
             E::Ne(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -696,7 +759,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "BinOr" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::BinOr takes 2 param".to_owned()));
+            }
             E::BinOr(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -704,7 +769,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "BinAnd" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::BinAnd takes 2 param".to_owned()));
+            }
             E::BinAnd(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -712,7 +779,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Xor" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Xor takes 2 param".to_owned()));
+            }
             E::Xor(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -720,7 +789,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Or" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::Or takes 2 param".to_owned()));
+            }
             E::Or(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -728,7 +799,9 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "And" => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(Error::Grammar("Expr::And takes 2 param".to_owned()));
+            }
             E::And(
                 Box::new(args[0].clone().expr()),
                 Box::new(args[1].clone().expr()),
@@ -736,63 +809,107 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             )
         }
         "Uminus" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Uminus takes 1 param".to_owned()));
+            }
             E::Uminus(Box::new(args[0].clone().expr()), None)
         }
         "Not" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Not takes 1 param".to_owned()));
+            }
             E::Not(Box::new(args[0].clone().expr()), None)
         }
         "Sin" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Sin takes 1 param".to_owned()));
+            }
             E::Sin(Box::new(args[0].clone().expr()), None)
         }
         "Cos" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Cos takes 1 param".to_owned()));
+            }
             E::Cos(Box::new(args[0].clone().expr()), None)
         }
         "Sqrt" => {
-            assert!(args.len() == 1);
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Sqrt takes 1 param".to_owned()));
+            }
             E::Sqrt(Box::new(args[0].clone().expr()), None)
         }
         "Var" => {
-            assert!(args.len() == 1);
-            let AstNode::Data{ref dtype, ref children} = args[0] else { panic!(); };
+            if args.len() != 1 {
+                return Err(Error::Grammar("Expr::Var takes 1 param".to_owned()));
+            }
+            let AstNode::Data{ref dtype, ref children} = args[0] else { return Err(Error::ShouldNeverBeThere) };
             match &dtype[..] {
                 "VarExpr::Int" => {
-                    assert!(children.len() == 1);
-                    E::VarInt(children[0].clone().token().int())
+                    if children.len() != 1 {
+                        return Err(Error::ShouldNeverBeThere);
+                    }
+                    E::VarInt(children[0].clone().token().int_or(Error::Grammar(
+                        "Arg to VarExpr::Int should be an int".to_owned(),
+                    ))?)
                 }
                 "VarExpr::Float" => {
-                    assert!(children.len() == 1);
-                    E::VarFloat(children[0].clone().token().float())
+                    if children.len() != 1 {
+                        return Err(Error::ShouldNeverBeThere);
+                    }
+                    E::VarFloat(children[0].clone().token().float_or(Error::Grammar(
+                        "Arg to VarExpr::Float should be a float".to_owned(),
+                    ))?)
                 }
                 _ => {
-                    panic!();
+                    return Err(Error::ShouldNeverBeThere);
                 }
             }
         }
         t => {
-            panic!("unknown type {t} for Expr");
+            return Err(Error::Grammar(format!("unknown type {t} for Expr")));
         }
-    })
+    }))
 }
 
-fn resolve_varexpr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
-    let mut it = typ.iter();
-    let typ = it.next().expect("VarExpr should have subtype");
-    assert!(it.next().is_none());
-    match &typ[..] {
-        "Int" => AstNode::Data {
-            dtype: "VarExpr::Int".to_string(),
-            children: args.to_vec(),
-        },
-        "Float" => AstNode::Data {
-            dtype: "VarExpr::Float".to_string(),
-            children: args.to_vec(),
-        },
+fn resolve_varexpr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+    if typ.len() != 1 {
+        return Err(Error::Grammar(
+            "VarExpr command is composed of 1 subcommand".to_owned(),
+        ));
+    }
+    let typ = &typ[0];
+    Ok(match &typ[..] {
+        "Int" => {
+            if args.len() != 1 {
+                return Err(Error::Grammar(
+                    "VarExpr::Int subcommand takes 1 param".to_owned(),
+                ));
+            }
+            AstNode::Data {
+                dtype: "VarExpr::Int".to_string(),
+                children: args.to_vec(),
+            }
+        }
+        "Float" => {
+            if args.len() != 1 {
+                return Err(Error::Grammar(
+                    "VarExpr::Float subcommand takes 1 param".to_owned(),
+                ));
+            }
+            AstNode::Data {
+                dtype: "VarExpr::Float".to_string(),
+                children: args.to_vec(),
+            }
+        }
         "MInt" => {
-            let int = -args[0].clone().token().int();
+            if args.len() != 1 {
+                return Err(Error::Grammar(
+                    "VarExpr::MInt subcommand takes 1 param".to_owned(),
+                ));
+            }
+            let int = -args[0].clone().token().int_or(Error::Grammar(
+                "Param to MInt should be an integer".to_owned(),
+            ))?;
             let int = AstNode::Token(Token::Int(int));
             AstNode::Data {
                 dtype: "VarExpr::Int".to_string(),
@@ -800,7 +917,14 @@ fn resolve_varexpr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             }
         }
         "MFloat" => {
-            let float = -args[0].clone().token().float();
+            if args.len() != 1 {
+                return Err(Error::Grammar(
+                    "VarExpr::MFloat subcommand takes 1 param".to_owned(),
+                ));
+            }
+            let float = -args[0].clone().token().float_or(Error::Grammar(
+                "Param to MInt should be an float".to_owned(),
+            ))?;
             let float = AstNode::Token(Token::Float(float));
             AstNode::Data {
                 dtype: "VarExpr::Float".to_string(),
@@ -808,9 +932,9 @@ fn resolve_varexpr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
             }
         }
         t => {
-            panic!("unknown type {t} for VarExpr");
+            return Err(Error::Grammar(format!("unknown type {t} for VarExpr")));
         }
-    }
+    })
 }
 
 pub fn fill_executor(resolver: &mut AstResolver<AstNode>) {

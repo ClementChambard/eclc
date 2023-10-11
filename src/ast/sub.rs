@@ -1,3 +1,8 @@
+use crate::{
+    ecl_instructions::{MatchInsResult, MatchType},
+    error::Error,
+};
+
 use super::*;
 
 use magic_unwrapper::EnumUnwrap;
@@ -16,16 +21,16 @@ pub struct Sub {
 }
 
 impl Sub {
-    fn replace_vars(&mut self) {
+    fn replace_vars(&mut self) -> Result<(), Error> {
         let mut scope = variables::Scope::new();
         for p in &self.params {
             match p {
-                Param::Int(name) => scope.add_var(name, 1),
-                Param::Float(name) => scope.add_var(name, 2),
+                Param::Int(name) => scope.add_var(name, 1)?,
+                Param::Float(name) => scope.add_var(name, 2)?,
             }
         }
 
-        self.instructions = variables::replace_in_bloc(&mut scope, &self.instructions);
+        self.instructions = variables::replace_in_bloc(&mut scope, &self.instructions)?;
 
         if scope.max_offset > 0 {
             self.instructions.insert(
@@ -33,6 +38,7 @@ impl Sub {
                 Instr::Call("ins_40".to_string(), vec![Expr::Int(scope.max_offset)]),
             );
         }
+        Ok(())
     }
 
     pub fn gen_label(&self, lbl_seed: &mut usize) -> String {
@@ -42,35 +48,25 @@ impl Sub {
         n
     }
 
-    fn flatten_bloc(bloc: &Vec<Instr>) -> Vec<Instr> {
-        let mut new_instructions = Vec::new();
-        for i in bloc {
-            match i {
-                Instr::Bloc(l) => new_instructions.extend(Self::flatten_bloc(l)),
-                _ => new_instructions.push(i.clone()),
-            }
-        }
-        new_instructions
-    }
-
-    fn resolve_push_expr(&mut self) {
+    fn resolve_push_expr(&mut self) -> Result<(), Error> {
         let mut new_instructions = Vec::new();
         for i in &self.instructions {
             match i {
-                Instr::PushExpr(e) => new_instructions.extend(e.instructions()),
+                Instr::PushExpr(e) => new_instructions.extend(e.instructions()?),
                 _ => new_instructions.push(i.clone()),
             }
         }
         self.instructions = new_instructions;
+        Ok(())
     }
 
-    fn check_expressions(&mut self) {
+    fn check_expressions(&mut self) -> Result<(), Error> {
         let mut new_instructions = Vec::new();
         for i in &self.instructions {
             match i {
                 Instr::PushExpr(e) => {
                     let mut e = e.clone();
-                    e.anotate();
+                    e.anotate()?;
                     e.constant_fold();
                     new_instructions.push(Instr::PushExpr(e));
                 }
@@ -79,22 +75,56 @@ impl Sub {
                     let mut stoff = -1;
                     for e in v {
                         let mut e = e.clone();
-                        e.anotate();
+                        e.anotate()?;
                         e.constant_fold();
                         if e.is_primitive() {
                             args.push(e);
                         } else {
-                            let t = e.get_type();
+                            let t = e.get_type()?;
                             new_instructions.push(Instr::PushExpr(e));
                             match t {
                                 ExprType::Int => args.push(Expr::VarInt(stoff)),
                                 ExprType::Float => args.push(Expr::VarFloat(stoff as f32)),
-                                _ => panic!("Can't push non number onto the stack"),
+                                ExprType::String => {
+                                    return Err(Error::Simple(
+                                        "Can't push string onto the stack".to_owned(),
+                                    ))
+                                }
                             }
                             stoff -= 1;
                         }
                     }
-                    let ins_opcode = crate::ecl_instructions::matching_ins_sep(name, &args);
+                    let ins_found = crate::ecl_instructions::matching_ins_sep(name, &args)?;
+                    let ins_opcode = match ins_found {
+                        MatchInsResult::NoMatch(near_matches) => {
+                            println!("No instruction matching {}", i.signature()?);
+                            for nm in near_matches {
+                                match nm.mt {
+                                    MatchType::StringInVarargs => println!(
+                                        "- Found instruction {} but string was used in vararg",
+                                        nm.id.signature()
+                                    ),
+                                    MatchType::NameAndArgCountMatch => println!(
+                                "- Found instruction {} with same name and number of arguments",
+                                nm.id.signature()
+                            ),
+                                    MatchType::NameMatch => {
+                                        println!(
+                                            "- Found instruction {} with same name",
+                                            nm.id.signature()
+                                        )
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            return Err(Error::Simple(
+                                "Couldn't resolve instruction call".to_owned(),
+                            ));
+                        }
+                        MatchInsResult::MatchVA(oc, _va) => oc,
+                        MatchInsResult::Match(oc) => oc,
+                    };
+
                     let new_name = String::from(format!("ins_{ins_opcode}"));
                     // if vararg, insert type markers
                     new_instructions.push(Instr::Call(new_name, args));
@@ -103,6 +133,7 @@ impl Sub {
             }
         }
         self.instructions = new_instructions;
+        Ok(())
     }
 
     fn check_if_sub_returns(&mut self) {
@@ -127,22 +158,23 @@ impl Sub {
         }
     }
 
-    pub fn process(&mut self) {
+    pub fn process(&mut self) -> Result<(), Error> {
         let mut lbl_seed = 0usize;
-        self.replace_vars();
-        self.instructions = builtin_idents::replace(&self.instructions);
-        self.instructions = if_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed);
+        self.replace_vars()?;
+        self.instructions = builtin_idents::replace(&self.instructions)?;
+        self.instructions = if_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed)?;
         self.instructions = loop_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed);
-        self.instructions = while_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed);
+        self.instructions =
+            while_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed)?;
         // desugar other
         // maybe resolve variables before flattening anything.
-        self.instructions = Self::flatten_bloc(&self.instructions);
         self.check_if_sub_returns();
-        self.check_expressions();
-        self.resolve_push_expr();
+        self.check_expressions()?;
+        self.resolve_push_expr()?;
         self.resolve_labels();
         // optimize jump chain and remove dead code at some point
         // resolve other identifiers: vars, constants ... (right now there is none)
+        Ok(())
     }
 
     fn resolve_labels(&mut self) {
@@ -172,28 +204,43 @@ impl Sub {
     }
 }
 
-fn resolve_param(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
-    assert!(typ.len() == 1);
-    assert!(args.len() == 1);
+fn resolve_param(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+    if typ.len() != 1 {
+        return Err(Error::Grammar(
+            "Param command is composed of 1 sub command".to_owned(),
+        ));
+    }
+    if args.len() != 1 {
+        return Err(Error::Grammar("Sub command takes 1 parameter".to_owned()));
+    }
     let typ = &typ[0];
-    AstNode::Param(match &typ[..] {
+    Ok(AstNode::Param(match &typ[..] {
         "Int" => Param::Int(args[0].clone().token().id()),
         "Float" => Param::Float(args[0].clone().token().id()),
-        _ => panic!("Unknown param type"),
-    })
+        _ => {
+            return Err(Error::Grammar(format!(
+                "Unknown Param subcommand {}",
+                &typ[..]
+            )))
+        }
+    }))
 }
 
-fn resolve_sub(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
-    assert!(typ.is_empty());
-    assert!(args.len() == 3);
+fn resolve_sub(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+    if !typ.is_empty() {
+        return Err(Error::Grammar("Sub command has no subcommand".to_owned()));
+    }
+    if args.len() != 3 {
+        return Err(Error::Grammar("Sub command takes 3 parameters".to_owned()));
+    }
     let val = args[0].clone().token().id();
     let param_list = args[1].clone().list();
     let ins_list = args[2].clone().list();
-    AstNode::Sub(Sub {
+    Ok(AstNode::Sub(Sub {
         name: val.clone(),
         params: param_list.into_iter().map(|n| n.param()).collect(),
         instructions: ins_list.into_iter().map(|n| n.instr()).collect(),
-    })
+    }))
 }
 
 pub fn fill_executor(resolver: &mut AstResolver<AstNode>) {

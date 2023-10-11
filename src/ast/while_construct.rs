@@ -1,15 +1,21 @@
+use crate::error::Error;
+
 use super::*;
 
-pub fn desugar_bloc(sub: &Sub, bloc: &Vec<Instr>, lbl_seed: &mut usize) -> Vec<Instr> {
+pub fn desugar_bloc(
+    sub: &Sub,
+    bloc: &Vec<Instr>,
+    lbl_seed: &mut usize,
+) -> Result<Vec<Instr>, Error> {
     let mut new_instr = Vec::new();
     for i in bloc {
         match i {
-            Instr::While(e, l) => new_instr.extend(desugar(sub, e, l, lbl_seed, true)),
-            Instr::DoWhile(e, l) => new_instr.extend(desugar(sub, e, l, lbl_seed, false)),
+            Instr::While(e, l) => new_instr.extend(desugar(sub, e, l, lbl_seed, true)?),
+            Instr::DoWhile(e, l) => new_instr.extend(desugar(sub, e, l, lbl_seed, false)?),
             _ => new_instr.push(i.clone()),
         }
     }
-    new_instr
+    Ok(new_instr)
 }
 
 pub fn desugar(
@@ -18,22 +24,24 @@ pub fn desugar(
     bloc: &Vec<Instr>,
     lbl_seed: &mut usize,
     first_jump: bool,
-) -> Vec<Instr> {
+) -> Result<Vec<Instr>, Error> {
     let mut e = cond.clone();
-    e.anotate();
+    e.anotate()?;
     e.constant_fold();
-    if e.get_type() != ExprType::Int {
-        panic!("Condition for while should be type Int");
+    if e.get_type()? != ExprType::Int {
+        return Err(Error::Simple(
+            "Condition for while should be type Int".to_owned(),
+        ));
     }
     if e.is_primitive() && !e.is_var() {
         let i = e.int();
         if i != 0 {
-            return super::loop_construct::desugar(sub, bloc, lbl_seed);
+            return Ok(super::loop_construct::desugar(sub, bloc, lbl_seed));
         } else {
             if first_jump {
-                return vec![];
+                return Ok(vec![]);
             } else {
-                return bloc.clone();
+                return Ok(bloc.clone());
             }
         }
     }
@@ -72,7 +80,7 @@ pub fn desugar(
             _ => bloc_instructions.push(i.clone()),
         }
     }
-    let bloc = desugar_bloc(sub, &bloc_instructions, lbl_seed);
+    let bloc = desugar_bloc(sub, &bloc_instructions, lbl_seed)?;
     instructions.push(Instr::Label(loop_label.clone()));
     instructions.extend(bloc);
     if first_jump {
@@ -86,5 +94,5 @@ pub fn desugar(
     if has_break {
         instructions.push(Instr::Label(break_label));
     }
-    instructions
+    Ok(instructions)
 }
