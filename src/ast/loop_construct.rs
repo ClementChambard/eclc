@@ -34,12 +34,12 @@ pub fn desugar(sub: &Sub, bloc: &Vec<Instr>, lbl_seed: &mut usize) -> Vec<Instr>
                 }
                 bloc_instructions.push(Instr::Call(
                     "ins_12".to_string(),
-                    vec![Expr::Id(break_label.clone()), Expr::Int(0)], // TODO: int is the time
+                    vec![Expr::Id(break_label.clone()), Expr::Float(0.)], // TODO: int is the time
                 ));
             }
             Instr::Continue => bloc_instructions.push(Instr::Call(
                 "ins_12".to_string(),
-                vec![Expr::Id(loop_label.clone()), Expr::Int(0)], // TODO: int is the time
+                vec![Expr::Id(loop_label.clone()), Expr::Float(0.)], // TODO: int is the time
             )),
             _ => bloc_instructions.push(i.clone()),
         }
@@ -49,7 +49,7 @@ pub fn desugar(sub: &Sub, bloc: &Vec<Instr>, lbl_seed: &mut usize) -> Vec<Instr>
     instructions.extend(bloc);
     instructions.push(Instr::Call(
         "ins_12".to_string(),
-        vec![Expr::Id(loop_label), Expr::Int(0)], // TODO: int is the time
+        vec![Expr::Id(loop_label), Expr::Float(0.)], // TODO: int is the time
     ));
     if has_break {
         instructions.push(Instr::Label(break_label));

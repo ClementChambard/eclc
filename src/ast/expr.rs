@@ -275,7 +275,8 @@ impl Expr {
             | Expr::Sin(_, Some(a))
             | Expr::Cos(_, Some(a))
             | Expr::Sqrt(_, Some(a)) => a.expr_type,
-            Expr::Id(_) => panic!("Can't know the type of an id"),
+            Expr::Id(_) => ExprType::Int, // unaffected id can only be label at this point so it's
+            // an int
             _ => panic!("Can't know type of unanotated node"),
         }
     }

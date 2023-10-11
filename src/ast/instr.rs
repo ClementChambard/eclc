@@ -168,7 +168,7 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> AstNode {
                 "ins_12".to_string(),
                 vec![
                     Expr::Id(args[0].clone().token().id()),
-                    Expr::Int(args[1].clone().token().int()),
+                    Expr::Float(args[1].clone().token().num_as_float()),
                 ],
             )
         }

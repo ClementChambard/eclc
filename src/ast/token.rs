@@ -22,3 +22,13 @@ impl From<&crate::lexer::Token<'_, &str>> for Token {
         }
     }
 }
+
+impl Token {
+    pub fn num_as_float(self) -> f32 {
+        match self {
+            Self::Int(i) => i as f32,
+            Self::Float(f) => f,
+            _ => panic!(""),
+        }
+    }
+}

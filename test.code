@@ -1,4 +1,4 @@
-ecli { }
+ecli {}
 anmi { "enemy.anm", "st01enm.anm" }
 
 sub main() {

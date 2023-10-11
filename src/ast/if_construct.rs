@@ -61,7 +61,7 @@ pub fn desugar(
         "ins_14".to_string(),
         vec![
             Expr::Id(else_label.clone()),
-            Expr::Int(0), // TODO: should not be 0 but the time of the if
+            Expr::Float(0.), // TODO: should not be 0 but the time of the if
         ],
     ));
     new_instructions.extend(if_bloc);
@@ -73,7 +73,7 @@ pub fn desugar(
             "ins_12".to_string(),
             vec![
                 Expr::Id(endif_label.clone()),
-                Expr::Int(0), // TODO: should be the time of last if_bloc instruction
+                Expr::Float(0.), // TODO: should be the time of last if_bloc instruction
             ],
         ));
         new_instructions.push(Instr::Label(else_label));
