@@ -1,7 +1,11 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::io::Write;
 
 mod ast;
 mod code_gen;
+mod ecl_instructions;
 mod error;
 mod grammar;
 mod grammar_file;

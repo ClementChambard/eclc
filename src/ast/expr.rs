@@ -1,5 +1,7 @@
 use super::*;
 
+use magic_unwrapper::EnumUnwrap;
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ExprType {
     Int,
@@ -252,27 +254,27 @@ impl Expr {
             Expr::Float(_) => ExprType::Float,
             Expr::VarFloat(_) => ExprType::Float,
             Expr::Str(_) => ExprType::String,
-            Expr::Add(_, _, Some(a)) => a.expr_type,
-            Expr::Sub(_, _, Some(a)) => a.expr_type,
-            Expr::Mul(_, _, Some(a)) => a.expr_type,
-            Expr::Div(_, _, Some(a)) => a.expr_type,
-            Expr::Modulo(_, _, Some(a)) => a.expr_type,
-            Expr::Gt(_, _, Some(a)) => a.expr_type,
-            Expr::Ge(_, _, Some(a)) => a.expr_type,
-            Expr::Lt(_, _, Some(a)) => a.expr_type,
-            Expr::Le(_, _, Some(a)) => a.expr_type,
-            Expr::Eq(_, _, Some(a)) => a.expr_type,
-            Expr::Ne(_, _, Some(a)) => a.expr_type,
-            Expr::BinAnd(_, _, Some(a)) => a.expr_type,
-            Expr::BinOr(_, _, Some(a)) => a.expr_type,
-            Expr::Xor(_, _, Some(a)) => a.expr_type,
-            Expr::Or(_, _, Some(a)) => a.expr_type,
-            Expr::And(_, _, Some(a)) => a.expr_type,
-            Expr::Uminus(_, Some(a)) => a.expr_type,
-            Expr::Not(_, Some(a)) => a.expr_type,
-            Expr::Sin(_, Some(a)) => a.expr_type,
-            Expr::Cos(_, Some(a)) => a.expr_type,
-            Expr::Sqrt(_, Some(a)) => a.expr_type,
+            Expr::Add(_, _, Some(a))
+            | Expr::Sub(_, _, Some(a))
+            | Expr::Mul(_, _, Some(a))
+            | Expr::Div(_, _, Some(a))
+            | Expr::Modulo(_, _, Some(a))
+            | Expr::Gt(_, _, Some(a))
+            | Expr::Ge(_, _, Some(a))
+            | Expr::Lt(_, _, Some(a))
+            | Expr::Le(_, _, Some(a))
+            | Expr::Eq(_, _, Some(a))
+            | Expr::Ne(_, _, Some(a))
+            | Expr::BinAnd(_, _, Some(a))
+            | Expr::BinOr(_, _, Some(a))
+            | Expr::Xor(_, _, Some(a))
+            | Expr::Or(_, _, Some(a))
+            | Expr::And(_, _, Some(a))
+            | Expr::Uminus(_, Some(a))
+            | Expr::Not(_, Some(a))
+            | Expr::Sin(_, Some(a))
+            | Expr::Cos(_, Some(a))
+            | Expr::Sqrt(_, Some(a)) => a.expr_type,
             Expr::Id(_) => panic!("Can't know the type of an id"),
             _ => panic!("Can't know type of unanotated node"),
         }

@@ -218,11 +218,6 @@ ExprPrimitive ::= int                    { Expr::Int($0) }
                 | kw_cos ( Expr )        { Expr::Cos($2) }
                 | kw_sqrt ( Expr )       { Expr::Sqrt($2) }
 
-
-! || (S)
-! && (S)
-
-
 VarExpr ::= int                          { VarExpr::Int($0) }
           | float                        { VarExpr::Float($0) }
           | - MinusVarExpr               { $1 }

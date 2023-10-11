@@ -2,41 +2,24 @@ ecli { }
 anmi { "enemy.anm", "st01enm.anm" }
 
 sub main() {
+    anmSelect(2);
+    anmSetMain(0, 5);
+    movePos(0.f, 224.f);
+    movePosTime(60, 9, 100.f, 224.f);
++70:
+    movePos(0.f, 224.f);
+    moveCircRel(0.f, 0.f, 100.f, 0.f);
+    moveCircRelTime(120, 0, PI / 30.f, NULLF, 0.f);
++180:
+    moveCircRelTime(120, 0, NULLF, 50.f, 0.f);
++300:
+    movePosTime(60, 9, 0.f, 300.f);
++60:
+    moveCircRelTime(120, 0, 0.f, 0.f, 0.f);
++300:
+    movePos(-180.f, 436.f);
++60:
+    moveCurve(120, 0, 13, 180.f, 12.f);
+    wait(10000);
     delete;
 }
-
-// anm[#slot] {
-//     id: #id  // maybe do smthg to lookup id in anmi from name of anm file
-//     script: #script
-//     // other keys
-// };
-// 
-// desugars into:
-// ins_302(#id);
-// ins_306(#slot, #script);
-// 
-// can use other anm functions for other keys, like pos, rot, scale ...
-
-// sub main() {
-//     ins_302(2);
-//     ins_306(0, 5);
-//     ins_400(0.f, 224.f);
-//     ins_401(60, 9, 100.f, 224.f);
-// +70:
-//     ins_400(0.f, 224.f);
-//     ins_410(0.f, 0.f, 100.f, 0.f);
-//     ins_411(120, 0, 0.1047197552f, NULLF, 0.f);
-// +180:
-//     ins_411(120, 0, NULLF, 50.f, 0.f);
-// +300:
-//     ins_401(60, 9, 0.f, 300.f);
-// +60:
-//     ins_411(120, 0, 0.f, 0.f, 0.f);
-// +300:
-//     //ins_410(0.f, 0.05f, 10.f, 0.1f);
-//     ins_400(-180.f, 436.f);
-// +60:
-//     ins_434(120, 0, 13, 180.f, 12.f);
-//     ins_23(10000);
-//     ins_1();
-// }

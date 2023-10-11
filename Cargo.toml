@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 regex = "1.9.6"
+lazy_static = "1.4"
 magic_unwrapper = { path = "magic_unwrapper/magic_unwrapper" }
