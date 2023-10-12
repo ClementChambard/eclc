@@ -81,7 +81,7 @@ impl Scope {
         } else {
             Variable::Float(o as f32, v.to_string())
         };
-        if self.variables.iter().find(|va| va.name() == v).is_some() {
+        if self.variables.iter().any(|va| va.name() == v) {
             return Err(Error::Simple(format!("Variable {v} already exists")));
         }
         self.variables.push(var);
@@ -102,7 +102,7 @@ impl Scope {
                 if self.parent_scope.is_empty() {
                     return None;
                 }
-                self.parent_scope[0].get_var(&name)
+                self.parent_scope[0].get_var(name)
             }
             Some(_) => found,
         }
@@ -112,6 +112,11 @@ impl Scope {
 pub fn replace_in_expr(scope: &Scope, e: &mut Expr) {
     match e {
         Expr::VarInt(_) | Expr::VarFloat(_) | Expr::Int(_) | Expr::Float(_) | Expr::Str(_) => {}
+        Expr::Vararg(ref mut va) => {
+            for v in va {
+                replace_in_expr(scope, v);
+            }
+        }
         Expr::Add(ref mut e1, ref mut e2, _)
         | Expr::Sub(ref mut e1, ref mut e2, _)
         | Expr::Mul(ref mut e1, ref mut e2, _)
@@ -136,10 +141,11 @@ pub fn replace_in_expr(scope: &Scope, e: &mut Expr) {
         | Expr::Sqrt(ref mut e, _)
         | Expr::Not(ref mut e, _)
         | Expr::Uminus(ref mut e, _) => replace_in_expr(scope, e),
-        Expr::Id(s) => match scope.get_var(s) {
-            Some(v) => *e = v.expr(),
-            None => {}
-        },
+        Expr::Id(s) => {
+            if let Some(v) = scope.get_var(s) {
+                *e = v.expr();
+            }
+        }
     }
 }
 

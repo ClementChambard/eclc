@@ -1,6 +1,6 @@
 use crate::error::report_error;
-use crate::grammar::Grammar;
 use crate::grammar::get_production_table_entry;
+use crate::grammar::Grammar;
 use crate::grammar::Symbol;
 use crate::lexer::Tokens;
 
@@ -12,7 +12,11 @@ struct NodeAndTimes<'a, 'b> {
     pub times: usize,
 }
 
-pub fn parse<'a, 'b>(grammar: &Grammar, tokens: Tokens<'a, 'b, &'b str>, first_nt: &str) -> Option<Node<'a, 'b>> {
+pub fn parse<'a, 'b>(
+    grammar: &Grammar,
+    tokens: Tokens<'a, 'b, &'b str>,
+    first_nt: &str,
+) -> Option<Node<'a, 'b>> {
     let mut tokens = tokens;
     let parsing_table = grammar.fill_ll1_production_table();
     let mut symbols_to_derive = vec![Symbol::NT(first_nt.to_string())];
@@ -26,7 +30,9 @@ pub fn parse<'a, 'b>(grammar: &Grammar, tokens: Tokens<'a, 'b, &'b str>, first_n
         let s = &symbols_to_derive[0];
         match s {
             Symbol::NT(nt) => {
-                if let Some(parsing_table_entry) = get_production_table_entry(&parsing_table, nt, cur_token.kind) {
+                if let Some(parsing_table_entry) =
+                    get_production_table_entry(&parsing_table, nt, cur_token.kind)
+                {
                     let mut rule_symbols = parsing_table_entry;
                     node_stack.push(NodeAndTimes {
                         node: Node::NT(nt.clone(), vec![]),
@@ -40,7 +46,7 @@ pub fn parse<'a, 'b>(grammar: &Grammar, tokens: Tokens<'a, 'b, &'b str>, first_n
                             cur_token.kind, nt));
                     return None;
                 }
-            },
+            }
             Symbol::T(t) => {
                 if t == cur_token.kind {
                     node_stack.push(NodeAndTimes {
@@ -50,25 +56,24 @@ pub fn parse<'a, 'b>(grammar: &Grammar, tokens: Tokens<'a, 'b, &'b str>, first_n
                     cur_token_opt = tokens.next();
                     symbols_to_derive = symbols_to_derive[1..].to_vec();
                 } else {
-                    report_error(cur_token, tokens.get_sourcefile(),
-                        &format!("Expected token \"{}\", got \"{}\"", t, cur_token.kind));
+                    report_error(
+                        cur_token,
+                        tokens.get_sourcefile(),
+                        &format!("Expected token \"{}\", got \"{}\"", t, cur_token.kind),
+                    );
                     return None;
                 }
             }
         }
-        loop {
-            if let Some(n) = node_stack.iter().last() {
-                if n.times == 0 {
-                    let n = node_stack.pop().unwrap();
-                    if let Some(ref mut n2) = node_stack.iter_mut().last() {
-                        let Node::NT(_, ref mut v) = n2.node else { panic!() };
-                        n2.times -= 1;
-                        v.push(n.node);
-                    } else {
-                        ret = Some(n.node);
-                    }
+        while let Some(n) = node_stack.iter().last() {
+            if n.times == 0 {
+                let n = node_stack.pop().unwrap();
+                if let Some(ref mut n2) = node_stack.iter_mut().last() {
+                    let Node::NT(_, ref mut v) = n2.node else { panic!() };
+                    n2.times -= 1;
+                    v.push(n.node);
                 } else {
-                    break;
+                    ret = Some(n.node);
                 }
             } else {
                 break;

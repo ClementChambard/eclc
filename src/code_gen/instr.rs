@@ -49,6 +49,7 @@ enum CallArg {
     Str(String),
     Int(i32),
     Float(f32),
+    Vararg(Vec<CallArg>),
 }
 
 impl CallArg {
@@ -62,6 +63,7 @@ impl CallArg {
                 }
                 strlen + 4
             }
+            Self::Vararg(va) => (va.len() * 8) as u16,
             _ => 4,
         }
     }
@@ -71,17 +73,32 @@ impl CallArg {
             Self::Str(s) => {
                 let mut bytes = Vec::new();
                 let strlen = s.len() as u32;
-                bytes.extend_from_slice(&strlen.to_ne_bytes());
-                let padding = self.size() - 4 - strlen as u16;
+                let padding = self.size() as u32 - 4 - strlen;
+                bytes.extend_from_slice(&(strlen + padding).to_ne_bytes());
                 // should encode to Shift-JIS
                 bytes.extend(s.bytes());
-                for _ in 0..padding {
-                    bytes.push(0u8);
-                }
+                bytes.extend(vec![0u8; padding as usize]);
                 bytes
             }
             Self::Float(f) => f.to_ne_bytes().to_vec(),
             Self::Int(i) => i.to_ne_bytes().to_vec(),
+            Self::Vararg(va) => {
+                let mut bytes = Vec::new();
+                for v in va {
+                    match v {
+                        Self::Float(f) => {
+                            bytes.extend(vec![b'f'; 4]);
+                            bytes.extend_from_slice(&f.to_ne_bytes());
+                        }
+                        Self::Int(i) => {
+                            bytes.extend(vec![b'i'; 4]);
+                            bytes.extend_from_slice(&i.to_ne_bytes());
+                        }
+                        _ => {}
+                    }
+                }
+                bytes
+            }
         }
     }
 }
@@ -94,6 +111,7 @@ impl From<&Expr> for CallArg {
             Expr::Int(i) => Self::Int(*i),
             Expr::Float(f) => Self::Float(*f),
             Expr::Str(s) => Self::Str(s.clone()),
+            Expr::Vararg(va) => Self::Vararg(va.clone().iter().map(CallArg::from).collect()),
             _ => panic!("Cant have arg as complex expression"),
         }
     }
@@ -101,7 +119,7 @@ impl From<&Expr> for CallArg {
 
 pub fn gen_instr(i: &Instr, time_now: &mut u32, rank_now: &mut u8) -> Vec<u8> {
     match i {
-        Instr::Call(name, args) => gen_inscall(&name, &args, *time_now, *rank_now),
+        Instr::Call(name, args) => gen_inscall(name, args, *time_now, *rank_now),
         Instr::Bloc(insts) => {
             let mut bytes = vec![];
             for i in insts {
@@ -146,6 +164,18 @@ fn get_stack_ref(args: &[Expr]) -> u32 {
     cnt
 }
 
+fn get_param_count(args: &[Expr]) -> u8 {
+    let mut cnt = 0;
+    for a in args {
+        if let Expr::Vararg(va) = a {
+            cnt += va.len() as u8;
+        } else {
+            cnt += 1;
+        }
+    }
+    cnt
+}
+
 pub fn gen_inscall(name: &str, args: &[Expr], time_now: u32, rank_now: u8) -> Vec<u8> {
     let callargs: Vec<CallArg> = args.iter().map(|a| a.into()).collect();
     let mut code = InstrCallCode {
@@ -154,7 +184,7 @@ pub fn gen_inscall(name: &str, args: &[Expr], time_now: u32, rank_now: u8) -> Ve
         size: get_arg_size(&callargs) + 16,
         param_mask: get_param_mask(args),
         rank_mask: rank_now,
-        param_count: args.len() as u8,
+        param_count: get_param_count(args),
         cur_stack_ref: get_stack_ref(args),
     }
     .to_ne_bytes();

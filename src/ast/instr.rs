@@ -42,6 +42,7 @@ impl Instr {
                         ExprType::Int => s.push_str("int"),
                         ExprType::Float => s.push_str("float"),
                         ExprType::String => s.push_str("str"),
+                        ExprType::Vararg => s.push_str("..."),
                     }
                 }
                 s.push(')');
@@ -77,7 +78,7 @@ impl Instr {
     }
 }
 
-fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_instr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     assert!(typ.len() == 1 || typ.len() == 2);
     let typ0 = &typ[0];
     Ok(AstNode::Instr(match &typ0[..] {
@@ -206,19 +207,19 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
             )
         }
         "Break" => {
-            assert!(args.len() == 0);
+            assert!(args.is_empty());
             Instr::Break
         }
         "Continue" => {
-            assert!(args.len() == 0);
+            assert!(args.is_empty());
             Instr::Continue
         }
         "Return" => {
-            assert!(args.len() == 0);
+            assert!(args.is_empty());
             Instr::Call("ins_10".to_string(), vec![])
         }
         "Delete" => {
-            assert!(args.len() == 0);
+            assert!(args.is_empty());
             Instr::Call("ins_1".to_string(), vec![])
         }
         "If" => {
@@ -252,11 +253,11 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
                     assert!(args.len() == 1);
                     return Ok(AstNode::Data {
                         dtype: "Else::Some".to_string(),
-                        children: args.clone(),
+                        children: args.to_vec(),
                     });
                 }
                 "None" => {
-                    assert!(args.len() == 0);
+                    assert!(args.is_empty());
                     return Ok(AstNode::Data {
                         dtype: "Else::None".to_string(),
                         children: vec![],
@@ -303,7 +304,7 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
         "NewVarInt" => {
             assert!(args.len() == 2);
             let (_, children) = args[1].clone().data();
-            let e = if children.len() == 0 {
+            let e = if children.is_empty() {
                 None
             } else {
                 Some(children[0].clone().expr())
@@ -313,7 +314,7 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
         "NewVarFloat" => {
             assert!(args.len() == 2);
             let (_, children) = args[1].clone().data();
-            let e = if children.len() == 0 {
+            let e = if children.is_empty() {
                 None
             } else {
                 Some(children[0].clone().expr())
@@ -326,7 +327,7 @@ fn resolve_instr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
     }))
 }
 
-fn resolve_instrsub(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_instrsub(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if typ.len() != 1 {
         return Err(Error::Grammar("InstrSub takes 1 subcommand".to_owned()));
     }

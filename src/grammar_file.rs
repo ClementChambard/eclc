@@ -72,7 +72,7 @@ impl LineData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GrammarFile {
     lines: Vec<LineData>,
     tokens: Vec<TokenDecl>,
@@ -80,19 +80,6 @@ pub struct GrammarFile {
     next_line_prio: RulePriorities,
     line: usize,
     pos_in_line: usize,
-}
-
-impl Default for GrammarFile {
-    fn default() -> Self {
-        Self {
-            lines: vec![],
-            tokens: vec![],
-            ignore_decls: vec![],
-            next_line_prio: RulePriorities::new(),
-            line: 0,
-            pos_in_line: 0,
-        }
-    }
 }
 
 impl GrammarFile {
@@ -115,7 +102,7 @@ impl GrammarFile {
     }
 
     pub fn _gen_rust(&self) {
-        println!("pub fn init_lexer<'a>() -> Lexer<&'a str> {}", '{');
+        println!("pub fn init_lexer<'a>() -> Lexer<&'a str> {{");
         println!("    Lexer::builder()");
         for i in &self.ignore_decls {
             println!(
@@ -129,7 +116,7 @@ impl GrammarFile {
                 continue;
             }
             let re = match &t.regex {
-                Some(re) => &re,
+                Some(re) => re,
                 None => &t.in_file,
             };
             println!(
@@ -140,7 +127,7 @@ impl GrammarFile {
             );
         }
         println!("        .build().unwrap()");
-        println!("{}", '}');
+        println!("}}");
     }
 
     pub fn from_file(filename: &str) -> Result<Self, std::io::Error> {
@@ -157,9 +144,9 @@ impl GrammarFile {
             let content = &l.content;
             if content.starts_with('!') {
                 match content.split(' ').next().unwrap() {
-                    "!token" => f.token(&content),
-                    "!ignore" => f.ignore(&content),
-                    "!prio" => f.prio(&content),
+                    "!token" => f.token(content),
+                    "!ignore" => f.ignore(content),
+                    "!prio" => f.prio(content),
                     _ => {} // treated as a comment
                 }
             } else {
@@ -272,10 +259,10 @@ impl GrammarFile {
                 continue;
             }
             let re = match &t.regex {
-                Some(re) => &re,
+                Some(re) => re,
                 None => &t.in_file,
             };
-            lb = lb.token(&re, &t.in_file[..], t.escape);
+            lb = lb.token(re, &t.in_file[..], t.escape);
         }
         for i in &self.ignore_decls {
             lb = lb.ignore(&i[..]);

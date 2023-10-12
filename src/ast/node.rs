@@ -28,10 +28,7 @@ impl AstNode {
         (dtype, children)
     }
     pub fn is_none(&self) -> bool {
-        match self {
-            Self::None => true,
-            _ => false,
-        }
+        matches!(self, Self::None)
     }
 }
 

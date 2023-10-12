@@ -1,34 +1,38 @@
 ecli {}
 anmi { "enemy.anm", "st01enm.anm" }
 
+sub shoot(int count1, int count2) {
+    etCount(0, count1, count2);
+    etOn(0);
+}
+ 
 sub main() {
     etNew(0);
     etAim(0, AIM_AT_RING);
-    etCount(0, 10, 3);
     etSpeed(0, 1.f, 2.f);
     anmSelect(2);
     anmSetMain(0, 5);
     movePos(0.f, 224.f);
     movePosTime(60, 9, 100.f, 224.f);
 +70:
-    etOn(0);
+    @shoot(10, 3);
     movePos(0.f, 224.f);
     moveCircRel(0.f, 0.f, 100.f, 0.f);
     moveCircRelTime(120, 0, PI / 30.f, NULLF, 0.f);
 +180:
-    etOn(0);
+    @shoot(10, 4);
     moveCircRelTime(120, 0, NULLF, 50.f, 0.f);
 +300:
-    etOn(0);
+    @shoot(20, 4);
     movePosTime(60, 9, 0.f, 300.f);
 +60:
-    etOn(0);
+    @shoot(20, 4);
     moveCircRelTime(120, 0, 0.f, 0.f, 0.f);
 +300:
-    etOn(0);
+    @shoot(20, 4);
     movePos(-180.f, 436.f);
 +60:
-    etOn(0);
+    @shoot(20, 4);
     moveCurve(120, 0, 13, 180.f, 12.f);
     wait(10000);
     delete;

@@ -19,11 +19,11 @@ impl Der {
     pub fn execute<N: NeededForAstNode>(
         &self,
         resolver: &AstResolver<N>,
-        children: &Vec<Node>,
-        params: &Vec<N>,
+        children: &[Node],
+        params: &[N],
     ) -> Result<N, Error> {
         match self {
-            Self::Child(n) => resolver.resolve(&children[*n], &vec![]),
+            Self::Child(n) => resolver.resolve(&children[*n], &[]),
             Self::ChildDer(n, par) => {
                 let tmp: Result<Vec<N>, Error> = par
                     .iter()
@@ -40,8 +40,8 @@ impl AstDef {
     pub fn execute<N: NeededForAstNode>(
         &self,
         resolver: &AstResolver<N>,
-        children: &Vec<Node>,
-        params: &Vec<N>,
+        children: &[Node],
+        params: &[N],
     ) -> Result<N, Error> {
         match self {
             Self::Der(d) => d.execute(resolver, children, params),
@@ -79,7 +79,7 @@ pub fn parse_ast_def(s: &str) -> AstDef {
     let s = &s[1..].eat_spaces();
     let AstDefResult { res, next_str: s } = parse_ast_def_in(s);
     let s = s.eat_spaces();
-    assert!(s.len() == 1 && s.chars().next() == Some('}'));
+    assert!(s.len() == 1 && s.starts_with('}'));
     res
 }
 
@@ -88,7 +88,7 @@ struct IdentResult<'a> {
     next_str: &'a str,
 }
 
-fn read_ident<'a>(s: &'a str) -> IdentResult<'a> {
+fn read_ident(s: &str) -> IdentResult<'_> {
     let mut it = s.chars();
     let mut out = String::new();
     let c = it.next().expect("expected first char when reading ident");
@@ -113,7 +113,7 @@ struct AstFunResult<'a> {
     next_str: &'a str,
 }
 
-fn parse_ast_fun<'a>(s: &'a str) -> AstFunResult<'a> {
+fn parse_ast_fun(s: &str) -> AstFunResult<'_> {
     let mut out: Vec<String> = Vec::new();
     let mut st = s;
     loop {
@@ -148,13 +148,11 @@ struct AstDefResult<'a> {
     next_str: &'a str,
 }
 
-fn parse_ast_def_in<'a>(s: &'a str) -> AstDefResult<'a> {
+fn parse_ast_def_in(s: &str) -> AstDefResult<'_> {
     // either Der or Fn
     let s = s.eat_spaces();
-    if s.starts_with('$') {
-        let s = &s[1..];
-        if s.starts_with("param") {
-            let s = s.strip_prefix("param").unwrap();
+    if let Some(s) = s.strip_prefix('$') {
+        if let Some(s) = s.strip_prefix("param") {
             let (val, len) = get_num(s);
             let s = &s[len..].eat_spaces();
             AstDefResult {
@@ -164,22 +162,22 @@ fn parse_ast_def_in<'a>(s: &'a str) -> AstDefResult<'a> {
         } else {
             let (val, len) = get_num(s);
             let s = &s[len..].eat_spaces();
-            if s.chars().next() == Some('.') {
-                let s = &s[1..].eat_spaces();
+            if let Some(s) = s.strip_prefix('.') {
+                let s = &s.eat_spaces();
                 if !s.starts_with("derive") {
                     panic!("should derive after '.'");
                 }
                 let s = s.strip_prefix("derive").unwrap().eat_spaces();
-                assert!(s.chars().next() == Some('('));
+                assert!(s.starts_with('('));
                 let s = &s[1..].eat_spaces();
                 let AstParamsResult {
                     res: params,
                     next_str: s,
                 } = parse_ast_params(s);
-                assert!(s.chars().next() == Some(')'));
+                assert!(s.starts_with(')'));
                 AstDefResult {
                     res: AstDef::Der(Der::ChildDer(val, params)),
-                    next_str: &s[1..].eat_spaces(),
+                    next_str: s[1..].eat_spaces(),
                 }
             } else {
                 AstDefResult {
@@ -193,13 +191,13 @@ fn parse_ast_def_in<'a>(s: &'a str) -> AstDefResult<'a> {
             res: fun,
             next_str: s,
         } = parse_ast_fun(s);
-        assert!(s.chars().next() == Some('('));
+        assert!(s.starts_with('('));
         let s = &s[1..].eat_spaces();
         let AstParamsResult {
             res: params,
             next_str: s,
         } = parse_ast_params(s);
-        assert!(s.chars().next() == Some(')'));
+        assert!(s.starts_with(')'));
         AstDefResult {
             res: AstDef::Fun(
                 fun,
@@ -211,7 +209,7 @@ fn parse_ast_def_in<'a>(s: &'a str) -> AstDefResult<'a> {
                     })
                     .collect(),
             ),
-            next_str: &s[1..].eat_spaces(),
+            next_str: s[1..].eat_spaces(),
         }
     }
 }
@@ -221,7 +219,7 @@ struct AstParamsResult<'a> {
     next_str: &'a str,
 }
 
-fn parse_ast_params<'a>(s: &'a str) -> AstParamsResult<'a> {
+fn parse_ast_params(s: &str) -> AstParamsResult<'_> {
     let mut out: Vec<AstDef> = Vec::new();
     let mut st = s;
     if st.starts_with(')') {
@@ -234,8 +232,8 @@ fn parse_ast_params<'a>(s: &'a str) -> AstParamsResult<'a> {
         let AstDefResult { res, next_str } = parse_ast_def_in(st);
         out.push(res);
         st = next_str.eat_spaces();
-        if st.starts_with(",") {
-            st = st.strip_prefix(",").unwrap();
+        if st.starts_with(',') {
+            st = st.strip_prefix(',').unwrap();
         } else {
             break;
         }

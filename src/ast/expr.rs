@@ -9,6 +9,7 @@ pub enum ExprType {
     Int,
     Float,
     String,
+    Vararg,
 }
 
 #[derive(Debug, Clone)]
@@ -21,6 +22,7 @@ pub enum Expr {
     Int(i32),
     Float(f32),
     Str(String),
+    Vararg(Vec<Expr>),
     Id(String),
     VarInt(i32),
     VarFloat(f32),
@@ -50,6 +52,12 @@ pub enum Expr {
 impl Expr {
     pub fn constant_fold(&mut self) {
         match self {
+            Self::Int(_) => {}
+            Self::Float(_) => {}
+            Self::Id(_) => {}
+            Self::Str(_) => {}
+            Self::VarInt(_) => {}
+            Self::VarFloat(_) => {}
             Self::Add(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
@@ -84,7 +92,7 @@ impl Expr {
                     (Expr::Int(i), Expr::Str(s)) | (Expr::Str(s), Expr::Int(i)) => {
                         let mut new_s = String::new();
                         for _ in 0..*i {
-                            new_s.push_str(&s);
+                            new_s.push_str(s);
                         }
                         *self = Expr::Str(new_s)
                     }
@@ -103,9 +111,8 @@ impl Expr {
             Self::Modulo(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int(i % j),
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(i % j);
                 }
             }
             Self::Uminus(c, _) => {
@@ -126,23 +133,20 @@ impl Expr {
             }
             Self::Sin(e, _) => {
                 e.constant_fold();
-                match e.as_ref() {
-                    Expr::Float(f) => *self = Expr::Float(f.sin()),
-                    _ => {}
+                if let Expr::Float(f) = e.as_ref() {
+                    *self = Expr::Float(f.sin());
                 }
             }
             Self::Cos(e, _) => {
                 e.constant_fold();
-                match e.as_ref() {
-                    Expr::Float(f) => *self = Expr::Float(f.cos()),
-                    _ => {}
+                if let Expr::Float(f) = e.as_ref() {
+                    *self = Expr::Float(f.cos());
                 }
             }
             Self::Sqrt(e, _) => {
                 e.constant_fold();
-                match e.as_ref() {
-                    Expr::Float(f) => *self = Expr::Float(f.sqrt()),
-                    _ => {}
+                if let Expr::Float(f) = e.as_ref() {
+                    *self = Expr::Float(f.sqrt());
                 }
             }
             Self::Gt(l, r, _) => {
@@ -204,48 +208,43 @@ impl Expr {
             Self::BinAnd(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i & *j) as i32),
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(*i & *j)
                 }
             }
             Self::BinOr(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i | *j) as i32),
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(*i | *j)
                 }
             }
             Self::Xor(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i ^ *j) as i32),
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(*i ^ *j)
                 }
             }
             Self::Or(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => {
-                        *self = Expr::Int(((*i != 0) || (*j != 0)) as i32)
-                    }
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(((*i != 0) || (*j != 0)) as i32)
                 }
             }
             Self::And(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
-                match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => {
-                        *self = Expr::Int(((*i != 0) && (*j != 0)) as i32)
-                    }
-                    _ => {}
+                if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
+                    *self = Expr::Int(((*i != 0) && (*j != 0)) as i32)
                 }
             }
-            _ => {}
+            Self::Vararg(va) => {
+                for v in va {
+                    v.constant_fold();
+                }
+            }
         }
     }
 
@@ -256,6 +255,7 @@ impl Expr {
             Expr::Float(_) => ExprType::Float,
             Expr::VarFloat(_) => ExprType::Float,
             Expr::Str(_) => ExprType::String,
+            Expr::Vararg(_) => ExprType::Vararg,
             Expr::Add(_, _, Some(a))
             | Expr::Sub(_, _, Some(a))
             | Expr::Mul(_, _, Some(a))
@@ -289,6 +289,17 @@ impl Expr {
 
     pub fn anotate(&mut self) -> Result<(), Error> {
         match self {
+            Expr::Int(_) => {}
+            Expr::Float(_) => {}
+            Expr::VarInt(_) => {}
+            Expr::VarFloat(_) => {}
+            Expr::Str(_) => {}
+            Expr::Id(_) => {}
+            Expr::Vararg(ref mut va) => {
+                for v in va {
+                    v.anotate()?;
+                }
+            }
             Expr::Add(l, r, ref mut a)
             | Expr::Sub(l, r, ref mut a)
             | Expr::Mul(l, r, ref mut a)
@@ -368,7 +379,6 @@ impl Expr {
                     expr_type: ExprType::Float,
                 })
             }
-            _ => {}
         }
         Ok(())
     }
@@ -538,6 +548,7 @@ impl Expr {
             }
             Self::Id(i) => panic!("Unresolved identifier {i}"),
             Self::Str(_) => panic!("Can't push a string on the stack"),
+            Self::Vararg(_) => panic!("Can't push a vararg on the stack"),
             _ => panic!(
                 "Trying to generate instruction for non typed expression {:?}",
                 self
@@ -547,10 +558,7 @@ impl Expr {
     }
 
     pub fn is_var(&self) -> bool {
-        match self {
-            Self::VarInt(_) | Self::VarFloat(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::VarInt(_) | Self::VarFloat(_))
     }
 
     pub fn replace_id(&mut self, id: &str, to: &Expr) {
@@ -591,29 +599,34 @@ impl Expr {
             Self::Float(_) => {}
             Self::VarFloat(_) => {}
             Self::Str(_) => {}
+            Self::Vararg(va) => {
+                for v in va {
+                    v.replace_id(id, to);
+                }
+            }
         }
     }
 
     pub fn replace_all_id(&mut self, ids: &std::collections::HashMap<String, Expr>) {
         for (id, ex) in ids {
-            self.replace_id(&id, &ex);
+            self.replace_id(id, ex);
         }
     }
 
     pub fn is_primitive(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Self::Int(_)
-            | Self::Float(_)
-            | Self::Str(_)
-            | Self::Id(_)
-            | Self::VarFloat(_)
-            | Self::VarInt(_) => true,
-            _ => false,
-        }
+                | Self::Float(_)
+                | Self::Str(_)
+                | Self::Id(_)
+                | Self::VarFloat(_)
+                | Self::VarInt(_)
+        )
     }
 }
 
-fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_expr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     use Expr as E;
     assert!(typ.len() == 1);
     let typ = &typ[0];
@@ -871,7 +884,7 @@ fn resolve_expr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error
     }))
 }
 
-fn resolve_varexpr(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_varexpr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if typ.len() != 1 {
         return Err(Error::Grammar(
             "VarExpr command is composed of 1 subcommand".to_owned(),

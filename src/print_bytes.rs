@@ -1,4 +1,4 @@
-pub fn pr(bytes: &Vec<u8>) {
+pub fn pr(bytes: &[u8]) {
     for i in 0..bytes.len() / 16 {
         for j in 0..16 {
             let pos = j + i * 16;

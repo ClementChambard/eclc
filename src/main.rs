@@ -17,7 +17,7 @@ use error::Error;
 
 fn main() -> Result<(), Error> {
     // Read grammar
-    let mut gf = grammar_file::GrammarFile::from_file("test.grammar").map_err(|e| Error::IO(e))?;
+    let mut gf = grammar_file::GrammarFile::from_file("test.grammar").map_err(Error::IO)?;
     let rulestrings = grammar_file::parse_rules(&mut gf);
     let mut grammar = grammar::Grammar::from_rule_string(rulestrings);
     grammar.calculate_first_sets();
@@ -29,14 +29,14 @@ fn main() -> Result<(), Error> {
     ast::fill_executor(&mut ast_resolver);
 
     // Open code file
-    let src = lexer::SourceFile::open("test.code").map_err(|e| Error::IO(e))?;
+    let src = lexer::SourceFile::open("test.code").map_err(Error::IO)?;
 
     // Parse code
     let mut node = ast_resolver
         .resolve(
             &parser::parse(&grammar, lexer.tokens(&src), "Ecl")
                 .ok_or(Error::Simple("Could not parse node: Aborting".to_owned()))?,
-            &vec![],
+            &[],
         )?
         .ecl();
     println!("{:#?}", node);
@@ -49,9 +49,9 @@ fn main() -> Result<(), Error> {
     let bytes = code_gen::generate(&node);
     print_bytes::pr(&bytes);
     std::fs::File::create("out.ecl")
-        .map_err(|e| Error::IO(e))?
+        .map_err(Error::IO)?
         .write_all(&bytes)
-        .map_err(|e| Error::IO(e))?;
+        .map_err(Error::IO)?;
 
     Ok(())
 }

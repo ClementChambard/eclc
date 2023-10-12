@@ -10,7 +10,7 @@ struct SubHeaderCode {
 impl SubHeaderCode {
     fn new() -> Self {
         Self {
-            magic: ['E' as u8, 'C' as u8, 'L' as u8, 'H' as u8],
+            magic: [b'E', b'C', b'L', b'H'],
             data_offset: 16,
             zeros: [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8],
         }

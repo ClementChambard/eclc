@@ -70,7 +70,7 @@ impl InsDef {
             let opcode = name.strip_prefix("ins_").unwrap().parse().unwrap();
             self.opcode == opcode
         } else {
-            self.alt_names.contains(&&name[..])
+            self.alt_names.contains(&name)
         };
         if !has_same_name {
             return Ok(MatchType::NoMatch);
@@ -159,7 +159,7 @@ impl InsDef {
                 ArgType::Varargs => {}
             }
         }
-        return Ok(MatchType::PerfectMatch);
+        Ok(MatchType::PerfectMatch)
     }
 }
 
@@ -185,12 +185,12 @@ pub fn matching_ins_sep(name: &str, expr: &Vec<crate::ast::Expr>) -> Result<Matc
             MatchType::WithVarargs(va) => return Ok(MatchInsResult::MatchVA(i.opcode, va)),
             MatchType::NoMatch => {}
             _ => near_matches.push(NearMatch {
-                id: &i,
+                id: i,
                 mt: matching,
             }),
         }
     }
-    return Ok(MatchInsResult::NoMatch(near_matches));
+    Ok(MatchInsResult::NoMatch(near_matches))
 }
 
 lazy_static! {

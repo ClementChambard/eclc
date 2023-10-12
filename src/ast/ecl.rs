@@ -18,7 +18,7 @@ impl Ecl {
     }
 }
 
-fn resolve_ecl(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_ecl(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if !typ.is_empty() {
         return Err(Error::Grammar("Ecl command has no subcommands".to_owned()));
     }

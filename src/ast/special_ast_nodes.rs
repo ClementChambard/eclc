@@ -1,6 +1,6 @@
 use super::*;
 
-fn resolve_list(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_list(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if typ.len() != 1 {
         return Err(Error::Grammar(
             "List command is composed of 1 subcommand".to_owned(),

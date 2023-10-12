@@ -90,6 +90,11 @@ impl Sub {
                                         "Can't push string onto the stack".to_owned(),
                                     ))
                                 }
+                                ExprType::Vararg => {
+                                    return Err(Error::BackEnd(
+                                        "should not have vararg at this point".to_owned(),
+                                    ))
+                                }
                             }
                             stoff -= 1;
                         }
@@ -121,11 +126,16 @@ impl Sub {
                                 "Couldn't resolve instruction call".to_owned(),
                             ));
                         }
-                        MatchInsResult::MatchVA(oc, _va) => oc,
+                        MatchInsResult::MatchVA(oc, va) => {
+                            let mut new_args = args[..va].to_vec();
+                            new_args.push(Expr::Vararg(args[va..].to_vec()));
+                            args = new_args;
+                            oc
+                        }
                         MatchInsResult::Match(oc) => oc,
                     };
 
-                    let new_name = String::from(format!("ins_{ins_opcode}"));
+                    let new_name = format!("ins_{ins_opcode}");
                     // if vararg, insert type markers
                     new_instructions.push(Instr::Call(new_name, args));
                 }
@@ -142,7 +152,7 @@ impl Sub {
         if let Some(last) = last {
             match last {
                 Instr::Call(name, _) => {
-                    let opcode = crate::code_gen::resolve_ins_opcode(&name);
+                    let opcode = crate::code_gen::resolve_ins_opcode(name);
                     if opcode != 10 && opcode != 1 {
                         self.instructions
                             .push(Instr::Call("ins_10".to_string(), vec![]));
@@ -162,14 +172,13 @@ impl Sub {
         let mut lbl_seed = 0usize;
         self.replace_vars()?;
         self.instructions = builtin_idents::replace(&self.instructions)?;
-        self.instructions = if_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed)?;
-        self.instructions = loop_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed);
-        self.instructions =
-            while_construct::desugar_bloc(&self, &self.instructions, &mut lbl_seed)?;
+        self.instructions = if_construct::desugar_bloc(self, &self.instructions, &mut lbl_seed)?;
+        self.instructions = loop_construct::desugar_bloc(self, &self.instructions, &mut lbl_seed);
+        self.instructions = while_construct::desugar_bloc(self, &self.instructions, &mut lbl_seed)?;
         // desugar other
         // maybe resolve variables before flattening anything.
-        self.check_if_sub_returns();
         self.check_expressions()?;
+        self.check_if_sub_returns();
         self.resolve_push_expr()?;
         self.resolve_labels();
         // optimize jump chain and remove dead code at some point
@@ -191,20 +200,17 @@ impl Sub {
             pos += i.size();
         }
         for ni in &mut new_instructions {
-            match ni {
-                Instr::Call(_, v) => {
-                    for e in v.iter_mut() {
-                        e.replace_all_id(&labels);
-                    }
+            if let Instr::Call(_, v) = ni {
+                for e in v.iter_mut() {
+                    e.replace_all_id(&labels);
                 }
-                _ => {}
             }
         }
         self.instructions = new_instructions;
     }
 }
 
-fn resolve_param(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_param(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if typ.len() != 1 {
         return Err(Error::Grammar(
             "Param command is composed of 1 sub command".to_owned(),
@@ -226,7 +232,7 @@ fn resolve_param(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Erro
     }))
 }
 
-fn resolve_sub(typ: &Vec<String>, args: &Vec<AstNode>) -> Result<AstNode, Error> {
+fn resolve_sub(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     if !typ.is_empty() {
         return Err(Error::Grammar("Sub command has no subcommand".to_owned()));
     }

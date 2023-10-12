@@ -9,7 +9,7 @@ lazy_static! {
         builtin_idents.insert("false".to_owned(), Expr::Int(0));
         builtin_idents.insert("NULL".to_owned(), Expr::Int(-999999));
         builtin_idents.insert("NULLF".to_owned(), Expr::Float(-999999.));
-        builtin_idents.insert("PI".to_owned(), Expr::Float(3.1415926535));
+        builtin_idents.insert("PI".to_owned(), Expr::Float(std::f32::consts::PI));
 
         // Et ex
         builtin_idents.insert("EX_SPEEDUP".to_owned(), Expr::Int(1)); // Note: formerly EX_DIST

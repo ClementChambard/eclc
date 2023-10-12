@@ -17,8 +17,8 @@ impl<'a, 'b> Node<'a, 'b> {
                 kind,
                 loc: _,
                 text: _,
-            }) => &kind,
-            Self::NT(s, _) => &s,
+            }) => kind,
+            Self::NT(s, _) => s,
         }
     }
     pub fn string_rep(&self) -> String {
@@ -65,18 +65,20 @@ impl NeededForAstNode for AstNode {
 
 use std::collections::HashMap;
 
+type ExecutorFunction<N> = Box<dyn Fn(&[String], &[N]) -> Result<N, Error>>;
+
 #[derive(Default)]
 pub struct FnExecutor<N: NeededForAstNode> {
-    functions: HashMap<String, Box<dyn Fn(&Vec<String>, &Vec<N>) -> Result<N, Error>>>,
+    functions: HashMap<String, ExecutorFunction<N>>,
 }
 
 impl<N: NeededForAstNode> FnExecutor<N> {
-    pub fn exec(&self, name: &Vec<String>, params: &Vec<N>) -> Result<N, Error> {
-        assert!(name.len() > 0);
+    pub fn exec(&self, name: &[String], params: &[N]) -> Result<N, Error> {
+        assert!(!name.is_empty());
         let fn_name = &name[0];
         let name_add = &name[1..];
         let f = self.functions.get(fn_name).unwrap();
-        f(&name_add.to_vec(), params)
+        f(name_add, params)
     }
 }
 
@@ -90,12 +92,12 @@ impl<N: NeededForAstNode> AstResolver<N> {
     pub fn set_ast_prod(&mut self, map: HashMap<String, AstDef>) {
         self.map = map;
     }
-    pub fn resolve(&self, node: &Node, params: &Vec<N>) -> Result<N, Error> {
+    pub fn resolve(&self, node: &Node, params: &[N]) -> Result<N, Error> {
         match node {
             Node::NT(_, c) => {
                 let str_rep = node.string_rep();
                 let prod = self.map.get(&str_rep).unwrap();
-                prod.execute(&self, &c, params)
+                prod.execute(self, c, params)
             }
             Node::T(tok) => N::from_token(tok),
         }
@@ -103,7 +105,7 @@ impl<N: NeededForAstNode> AstResolver<N> {
 
     pub fn add_func<T>(&mut self, name: &str, f: T)
     where
-        T: Fn(&Vec<String>, &Vec<N>) -> Result<N, Error> + 'static,
+        T: Fn(&[String], &[N]) -> Result<N, Error> + 'static,
     {
         self.executor
             .functions

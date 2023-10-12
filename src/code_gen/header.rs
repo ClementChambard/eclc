@@ -14,7 +14,7 @@ struct EclCode {
 impl EclCode {
     fn new(include_length: u16, sub_count: u32) -> Self {
         Self {
-            magic: ['S' as u8, 'C' as u8, 'P' as u8, 'T' as u8],
+            magic: [b'S', b'C', b'P', b'T'],
             unknown1: 1u16,
             include_length,
             include_offset: 36,
@@ -85,9 +85,7 @@ impl<'a> IncList<'a> {
         let length = b.len();
         if length % 4 != 0 {
             let padding = 4 - (length % 4);
-            for _ in 0..padding {
-                b.push(0);
-            }
+            b.extend(vec![0u8; padding]);
         }
         b
     }
@@ -107,10 +105,7 @@ pub fn generate(ecl: &Ecl) -> Vec<u8> {
         sub_names.extend(s.name.bytes());
         sub_names.push(0u8);
     }
-    let sub_names_padding = 4 - (sub_names.len() % 4);
-    for _ in 0..sub_names_padding {
-        sub_names.push(0u8);
-    }
+    sub_names.extend(vec![0u8; 4 - (sub_names.len() % 4)]);
 
     let mut sub_offset = bytes.len() + 4 * ecl.subs.len() + sub_names.len();
     let mut sub_data = Vec::new();

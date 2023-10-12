@@ -37,12 +37,10 @@ pub fn desugar(
         let i = e.int();
         if i != 0 {
             return Ok(super::loop_construct::desugar(sub, bloc, lbl_seed));
+        } else if first_jump {
+            return Ok(vec![]);
         } else {
-            if first_jump {
-                return Ok(vec![]);
-            } else {
-                return Ok(bloc.clone());
-            }
+            return Ok(bloc.clone());
         }
     }
     let mut instructions = Vec::new();

@@ -10,7 +10,11 @@ use std::io::Write;
 
 impl ProductionTableEntry {
     pub fn new(nt: &str, tok: &str, produces: Vec<Symbol>) -> Self {
-        Self { nt: nt.to_string(), tok: tok.to_string(), produces }
+        Self {
+            nt: nt.to_string(),
+            tok: tok.to_string(),
+            produces,
+        }
     }
 
     fn _gen_rust<W: Write>(&self, buf: &mut BufWriter<W>) -> Result<(), std::io::Error> {
@@ -28,24 +32,36 @@ impl ProductionTableEntry {
         writeln!(buf, "    ));")?;
         Ok(())
     }
-    
 }
 
 pub type ProductionTable = Vec<ProductionTableEntry>;
 
-pub fn get_production_table_entry(table: &ProductionTable, nt: &str, tok: &str) -> Option<Vec<Symbol>> {
-    Some(table.iter().find(|entry| { entry.nt == nt && entry.tok == tok })?.produces.clone())
+pub fn get_production_table_entry(
+    table: &ProductionTable,
+    nt: &str,
+    tok: &str,
+) -> Option<Vec<Symbol>> {
+    Some(
+        table
+            .iter()
+            .find(|entry| entry.nt == nt && entry.tok == tok)?
+            .produces
+            .clone(),
+    )
 }
 
 use std::io::BufWriter;
-pub fn _gen_rust_for_production_table<W: Write>(buf: &mut BufWriter<W>, table: &ProductionTable) -> Result<(), std::io::Error> {
-    writeln!(buf, "pub fn gen_table() -> ProductionTable {}", '{')?;
+pub fn _gen_rust_for_production_table<W: Write>(
+    buf: &mut BufWriter<W>,
+    table: &ProductionTable,
+) -> Result<(), std::io::Error> {
+    writeln!(buf, "pub fn gen_table() -> ProductionTable {{")?;
     writeln!(buf, "    let mut table = vec![];")?;
     for e in table {
         e._gen_rust(buf)?;
     }
     writeln!(buf, "    table")?;
-    writeln!(buf, "{}", '}')?;
+    writeln!(buf, "}}")?;
     Ok(())
 }
 

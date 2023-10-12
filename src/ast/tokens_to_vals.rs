@@ -26,7 +26,7 @@ pub fn int(s: &str) -> i32 {
 
 pub fn float(s: &str) -> f32 {
     let mut s = s;
-    if s.chars().last() == Some('f') {
+    if s.ends_with('f') {
         s = s.strip_suffix('f').unwrap();
     }
     s.parse().unwrap()
