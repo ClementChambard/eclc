@@ -32,12 +32,10 @@ impl Sub {
 
         self.instructions = variables::replace_in_bloc(&mut scope, &self.instructions)?;
 
-        if scope.max_offset > 0 {
-            self.instructions.insert(
-                0,
-                Instr::Call("ins_40".to_string(), vec![Expr::Int(scope.max_offset)]),
-            );
-        }
+        self.instructions.insert(
+            0,
+            Instr::Call("ins_40".to_string(), vec![Expr::Int(scope.max_offset)]),
+        );
         Ok(())
     }
 

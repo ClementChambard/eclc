@@ -56,7 +56,7 @@ impl CallArg {
     fn size(&self) -> u16 {
         match self {
             Self::Str(s) => {
-                let mut strlen = s.len() as u16;
+                let mut strlen = s.len() as u16 + 1;
                 let mod4 = strlen % 4;
                 if mod4 != 0 {
                     strlen = strlen - mod4 + 4;
@@ -72,11 +72,12 @@ impl CallArg {
         match self {
             Self::Str(s) => {
                 let mut bytes = Vec::new();
-                let strlen = s.len() as u32;
+                let strlen = s.len() as u32 + 1;
                 let padding = self.size() as u32 - 4 - strlen;
                 bytes.extend_from_slice(&(strlen + padding).to_ne_bytes());
                 // should encode to Shift-JIS
                 bytes.extend(s.bytes());
+                bytes.push(0u8);
                 bytes.extend(vec![0u8; padding as usize]);
                 bytes
             }
@@ -87,11 +88,11 @@ impl CallArg {
                 for v in va {
                     match v {
                         Self::Float(f) => {
-                            bytes.extend(vec![b'f'; 4]);
+                            bytes.extend(vec![b'f', b'f', 0u8, 0u8]);
                             bytes.extend_from_slice(&f.to_ne_bytes());
                         }
                         Self::Int(i) => {
-                            bytes.extend(vec![b'i'; 4]);
+                            bytes.extend(vec![b'i', b'i', 0u8, 0u8]);
                             bytes.extend_from_slice(&i.to_ne_bytes());
                         }
                         _ => {}

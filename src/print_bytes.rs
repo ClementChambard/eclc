@@ -1,5 +1,5 @@
 pub fn pr(bytes: &[u8]) {
-    for i in 0..bytes.len() / 16 {
+    for i in 0..=bytes.len() / 16 {
         for j in 0..16 {
             let pos = j + i * 16;
             if pos < bytes.len() {
@@ -13,8 +13,8 @@ pub fn pr(bytes: &[u8]) {
         }
         for j in 0..16 {
             let pos = j + i * 16;
-            let b = bytes[pos];
             if pos < bytes.len() {
+                let b = bytes[pos];
                 if b.is_ascii_punctuation() || b.is_ascii_alphanumeric() {
                     let c = char::from(b);
                     print!("{}", c);

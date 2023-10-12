@@ -1,15 +1,29 @@
+/*
+ecli {}
+anmi {}
+
+sub sub1(int a) {
+}
+
+sub sub2() {
+    @sub1(10);
+    spell(1000, 1000, 1000, "");
+}
+
+/*/
 ecli {}
 anmi { "enemy.anm", "st01enm.anm" }
 
-sub shoot(int count1, int count2) {
-    etCount(0, count1, count2);
-    etOn(0);
-}
- 
-sub main() {
+sub GirlR0() {
+    setHurtbox(2.f, 2.f);
     etNew(0);
+    etNew(1);
     etAim(0, AIM_AT_RING);
     etSpeed(0, 1.f, 2.f);
+    etSpeed(1, 1.2f, 2.5f);
+    etSprite(0, 4, 2);
+    etSprite(1, 8, 3);
+    etAngle(1, 0.f, PI / 8f);
     anmSelect(2);
     anmSetMain(0, 5);
     movePos(0.f, 224.f);
@@ -34,6 +48,29 @@ sub main() {
 +60:
     @shoot(20, 4);
     moveCurve(120, 0, 13, 180.f, 12.f);
++180:
+    movePosTime(60, 9, 0.f, 224.f);
+    @shoot(20, 5);
++60:
+    setBoss(0);
+    spell(0, 1000, 0, "");
++1000: spellEnd();
     wait(10000);
     delete;
 }
+ 
+sub main() {
+    enmCreate("GirlR0", 0.f, 0.f, 1000, 1000, 1);
+    loop {
+        wait(10000);
+    }
+}
+
+sub shoot(int count1, int count2) {
+    etCount(0, count1, 3);
+    etCount(1, count2, 2);
+    etOn(0);
+    etOn(1);
+}
+
+//*/
