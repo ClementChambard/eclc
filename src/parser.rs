@@ -1,5 +1,8 @@
+use crate::ast::tok_name_for_error;
 use crate::error::report_error;
+use crate::error::report_error_ext;
 use crate::grammar::get_production_table_entry;
+use crate::grammar::get_production_table_tokens_for_nt;
 use crate::grammar::Grammar;
 use crate::grammar::Symbol;
 use crate::lexer::Tokens;
@@ -7,16 +10,12 @@ use crate::lexer::Tokens;
 pub mod ast;
 use ast::*;
 
-struct NodeAndTimes<'a, 'b> {
-    pub node: Node<'a, 'b>,
+struct NodeAndTimes<'a> {
+    pub node: Node<'a>,
     pub times: usize,
 }
 
-pub fn parse<'a, 'b>(
-    grammar: &Grammar,
-    tokens: Tokens<'a, 'b, &'b str>,
-    first_nt: &str,
-) -> Option<Node<'a, 'b>> {
+pub fn parse<'a>(grammar: &Grammar, tokens: Tokens<'a, &str>, first_nt: &str) -> Option<Node<'a>> {
     let mut tokens = tokens;
     let parsing_table = grammar.fill_ll1_production_table();
     let mut symbols_to_derive = vec![Symbol::NT(first_nt.to_string())];
@@ -41,9 +40,29 @@ pub fn parse<'a, 'b>(
                     rule_symbols.extend(symbols_to_derive.into_iter().skip(1));
                     symbols_to_derive = rule_symbols;
                 } else {
-                    report_error(cur_token, tokens.get_sourcefile(),
-                        &format!("Production table entry not found for token \"{}\" at non terminal \"{}\"",
-                            cur_token.kind, nt));
+                    let expected_tokens = get_production_table_tokens_for_nt(&parsing_table, nt);
+                    if expected_tokens.is_empty() {
+                        report_error(
+                            &cur_token.loc,
+                            &format!("No production table entry for non terminal \"{}\"", nt),
+                        );
+                        return None;
+                    }
+                    let mut error_message = String::from("Expected one of : ");
+                    let etl = expected_tokens.len();
+                    for (i, t) in expected_tokens.into_iter().enumerate() {
+                        if i == 0 {
+                        } else if i == etl - 1 {
+                            error_message.push_str(" or ");
+                        } else {
+                            error_message.push_str(", ");
+                        }
+                        error_message.push_str(&tok_name_for_error(t));
+                    }
+                    let under_error = error_message.clone();
+                    error_message
+                        .push_str(&format!(", found {}", tok_name_for_error(cur_token.kind)));
+                    report_error_ext(&cur_token.loc, &error_message, &under_error);
                     return None;
                 }
             }
@@ -56,10 +75,14 @@ pub fn parse<'a, 'b>(
                     cur_token_opt = tokens.next();
                     symbols_to_derive = symbols_to_derive[1..].to_vec();
                 } else {
-                    report_error(
-                        cur_token,
-                        tokens.get_sourcefile(),
-                        &format!("Expected token \"{}\", got \"{}\"", t, cur_token.kind),
+                    report_error_ext(
+                        &cur_token.loc,
+                        &format!(
+                            "Expected {}, found {}",
+                            tok_name_for_error(t),
+                            tok_name_for_error(cur_token.kind)
+                        ),
+                        &format!("Expected {}", tok_name_for_error(t)),
                     );
                     return None;
                 }

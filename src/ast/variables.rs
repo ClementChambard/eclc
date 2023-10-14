@@ -22,13 +22,13 @@ impl Variable {
             Self::Float(_, _) => "ins_45".to_owned(),
         };
         let e = self.expr();
-        Instr::Call(ins_name, vec![e])
+        Instr::Call(ins_name.into(), vec![e])
     }
 
     pub fn expr(&self) -> Expr {
         match self {
-            Self::Int(i, _) => Expr::VarInt(*i),
-            Self::Float(i, _) => Expr::VarFloat(*i),
+            Self::Int(i, _) => Expr::VarInt((*i).into()),
+            Self::Float(i, _) => Expr::VarFloat((*i).into()),
         }
     }
 }
@@ -142,7 +142,7 @@ pub fn replace_in_expr(scope: &Scope, e: &mut Expr) {
         | Expr::Not(ref mut e, _)
         | Expr::Uminus(ref mut e, _) => replace_in_expr(scope, e),
         Expr::Id(s) => {
-            if let Some(v) = scope.get_var(s) {
+            if let Some(v) = scope.get_var(s.val()) {
                 *e = v.expr();
             }
         }
@@ -213,26 +213,26 @@ pub fn replace_in_bloc(scope: &mut Scope, ins: &Vec<Instr>) -> Result<Vec<Instr>
             Instr::Affect(v, e) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
-                new_ins.extend(scope.assign(v, &new_e)?);
+                new_ins.extend(scope.assign(v.val(), &new_e)?);
             }
             Instr::VarInt(v, e_opt) => {
-                scope.add_var(v, 1)?;
+                scope.add_var(v.val(), 1)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v, &new_e)?);
+                        new_ins.extend(scope.assign(v.val(), &new_e)?);
                     }
                     None => {}
                 }
             }
             Instr::VarFloat(v, e_opt) => {
-                scope.add_var(v, 2)?;
+                scope.add_var(v.val(), 2)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v, &new_e)?);
+                        new_ins.extend(scope.assign(v.val(), &new_e)?);
                     }
                     None => {}
                 }

@@ -1,4 +1,7 @@
-use crate::ast::{Expr, Instr, TimeLabelKind};
+use crate::{
+    ast::{Expr, Instr, TimeLabelKind},
+    error::report_error_ext,
+};
 
 struct InstrCallCode {
     time: u32,
@@ -50,6 +53,7 @@ enum CallArg {
     Int(i32),
     Float(f32),
     Vararg(Vec<CallArg>),
+    Err,
 }
 
 impl CallArg {
@@ -100,6 +104,7 @@ impl CallArg {
                 }
                 bytes
             }
+            Self::Err => panic!(),
         }
     }
 }
@@ -107,20 +112,30 @@ impl CallArg {
 impl From<&Expr> for CallArg {
     fn from(value: &Expr) -> Self {
         match value {
-            Expr::VarInt(i) => Self::Int(*i),
-            Expr::VarFloat(f) => Self::Float(*f),
-            Expr::Int(i) => Self::Int(*i),
-            Expr::Float(f) => Self::Float(*f),
-            Expr::Str(s) => Self::Str(s.clone()),
+            Expr::VarInt(i) => Self::Int(*i.val()),
+            Expr::VarFloat(f) => Self::Float(*f.val()),
+            Expr::Int(i) => Self::Int(*i.val()),
+            Expr::Float(f) => Self::Float(*f.val()),
+            Expr::Str(s) => Self::Str(s.val().clone()),
             Expr::Vararg(va) => Self::Vararg(va.clone().iter().map(CallArg::from).collect()),
-            _ => panic!("Cant have arg as complex expression"),
+            Expr::Id(id) => {
+                report_error_ext(
+                    id.loc(),
+                    &format!("unresolved identifier `{}`", id.val()),
+                    "unresolved identifier",
+                );
+                Self::Err
+            }
+            _ => {
+                panic!()
+            }
         }
     }
 }
 
 pub fn gen_instr(i: &Instr, time_now: &mut u32, rank_now: &mut u8) -> Vec<u8> {
     match i {
-        Instr::Call(name, args) => gen_inscall(name, args, *time_now, *rank_now),
+        Instr::Call(name, args) => gen_inscall(name.val(), args, *time_now, *rank_now),
         Instr::Bloc(insts) => {
             let mut bytes = vec![];
             for i in insts {
@@ -131,14 +146,14 @@ pub fn gen_instr(i: &Instr, time_now: &mut u32, rank_now: &mut u8) -> Vec<u8> {
         Instr::Label(_) => vec![], // no code to generate for label
         Instr::TimeLabel(t, k) => {
             match k {
-                TimeLabelKind::Set => *time_now = *t as u32,
-                TimeLabelKind::Add => *time_now += *t as u32,
-                TimeLabelKind::Sub => *time_now -= *t as u32,
+                TimeLabelKind::Set => *time_now = *t.val() as u32,
+                TimeLabelKind::Add => *time_now += *t.val() as u32,
+                TimeLabelKind::Sub => *time_now -= *t.val() as u32,
             };
             vec![]
         }
         Instr::RankLabel(r) => {
-            *rank_now = *r;
+            *rank_now = *r.val();
             vec![]
         }
         _ => panic!("Can't generate instruction {:?}", i),
@@ -150,12 +165,12 @@ fn get_stack_ref(args: &[Expr]) -> u32 {
     for a in args {
         match a {
             Expr::VarInt(i) => {
-                if *i < 0 && *i > -200 {
+                if *(i.val()) < 0 && *(i.val()) > -200 {
                     cnt += 1;
                 }
             }
             Expr::VarFloat(f) => {
-                if *f < 0. && *f > -200. {
+                if *(f.val()) < 0. && *(f.val()) > -200. {
                     cnt += 1;
                 }
             }
@@ -178,7 +193,7 @@ fn get_param_count(args: &[Expr]) -> u8 {
 }
 
 pub fn gen_inscall(name: &str, args: &[Expr], time_now: u32, rank_now: u8) -> Vec<u8> {
-    let callargs: Vec<CallArg> = args.iter().map(|a| a.into()).collect();
+    let callargs: Vec<CallArg> = args.iter().map(CallArg::from).collect();
     let mut code = InstrCallCode {
         time: time_now,
         opcode: resolve_ins_opcode(name),

@@ -5,12 +5,12 @@ use crate::lexer::Token;
 pub use micro_lang::{parse_ast_def, AstDef};
 
 #[derive(Debug)]
-pub enum Node<'a, 'b> {
-    NT(String, Vec<Node<'a, 'b>>),
-    T(Token<'a, &'b str>),
+pub enum Node<'a> {
+    NT(String, Vec<Node<'a>>),
+    T(Token<&'a str>),
 }
 
-impl<'a, 'b> Node<'a, 'b> {
+impl<'a> Node<'a> {
     pub fn name(&self) -> &str {
         match self {
             Self::T(Token {

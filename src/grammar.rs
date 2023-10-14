@@ -4,7 +4,10 @@ pub mod rules;
 mod symbol;
 
 pub use ll1_check::is_ll1_grammar;
-pub use production_table::{get_production_table_entry, ProductionTable, ProductionTableEntry};
+pub use production_table::{
+    get_production_table_entry, get_production_table_tokens_for_nt, ProductionTable,
+    ProductionTableEntry,
+};
 pub use rules::Rule;
 pub use symbol::Symbol;
 pub use symbol::SymbolName;

@@ -1,6 +1,6 @@
 use crate::{
     ecl_instructions::{MatchInsResult, MatchType},
-    error::Error,
+    error::{report_error_ext_one_more, report_note_simple, Error},
 };
 
 use super::*;
@@ -34,7 +34,10 @@ impl Sub {
 
         self.instructions.insert(
             0,
-            Instr::Call("ins_40".to_string(), vec![Expr::Int(scope.max_offset)]),
+            Instr::Call(
+                "ins_40".to_string().into(),
+                vec![Expr::Int(scope.max_offset.into())],
+            ),
         );
         Ok(())
     }
@@ -81,8 +84,8 @@ impl Sub {
                             let t = e.get_type()?;
                             new_instructions.push(Instr::PushExpr(e));
                             match t {
-                                ExprType::Int => args.push(Expr::VarInt(stoff)),
-                                ExprType::Float => args.push(Expr::VarFloat(stoff as f32)),
+                                ExprType::Int => args.push(Expr::VarInt(stoff.into())),
+                                ExprType::Float => args.push(Expr::VarFloat((stoff as f32).into())),
                                 ExprType::String => {
                                     return Err(Error::Simple(
                                         "Can't push string onto the stack".to_owned(),
@@ -97,29 +100,35 @@ impl Sub {
                             stoff -= 1;
                         }
                     }
-                    let ins_found = crate::ecl_instructions::matching_ins_sep(name, &args)?;
+                    let ins_found = crate::ecl_instructions::matching_ins_sep(name.val(), &args)?;
                     let ins_opcode = match ins_found {
                         MatchInsResult::NoMatch(near_matches) => {
-                            println!("No instruction matching {}", i.signature()?);
+                            report_error_ext_one_more(
+                                name.loc(),
+                                &format!("instruction `{}` does not exist", i.signature()?),
+                                "unknown instruction",
+                            );
                             for nm in near_matches {
                                 match nm.mt {
-                                    MatchType::StringInVarargs => println!(
-                                        "- Found instruction {} but string was used in vararg",
+                                    MatchType::StringInVarargs => report_note_simple(&format!(
+                                        "found instruction {} but string was used in vararg",
                                         nm.id.signature()
-                                    ),
-                                    MatchType::NameAndArgCountMatch => println!(
-                                "- Found instruction {} with same name and number of arguments",
-                                nm.id.signature()
-                            ),
+                                    )),
+                                    MatchType::NameAndArgCountMatch => {
+                                        report_note_simple(&format!(
+                                        "found instruction {} with same name and number of arguments",
+                                        nm.id.signature()))
+                                    }
                                     MatchType::NameMatch => {
-                                        println!(
-                                            "- Found instruction {} with same name",
-                                            nm.id.signature()
+                                        report_note_simple(&format!(
+                                            "found instruction {} with same name",
+                                            nm.id.signature())
                                         )
                                     }
                                     _ => {}
                                 }
                             }
+                            println!();
                             return Err(Error::Simple(
                                 "Couldn't resolve instruction call".to_owned(),
                             ));
@@ -135,7 +144,7 @@ impl Sub {
 
                     let new_name = format!("ins_{ins_opcode}");
                     // if vararg, insert type markers
-                    new_instructions.push(Instr::Call(new_name, args));
+                    new_instructions.push(Instr::Call(new_name.into(), args));
                 }
                 _ => new_instructions.push(i.clone()),
             }
@@ -150,19 +159,19 @@ impl Sub {
         if let Some(last) = last {
             match last {
                 Instr::Call(name, _) => {
-                    let opcode = crate::code_gen::resolve_ins_opcode(name);
+                    let opcode = crate::code_gen::resolve_ins_opcode(name.val());
                     if opcode != 10 && opcode != 1 {
                         self.instructions
-                            .push(Instr::Call("ins_10".to_string(), vec![]));
+                            .push(Instr::Call("ins_10".to_string().into(), vec![]));
                     }
                 }
                 _ => self
                     .instructions
-                    .push(Instr::Call("ins_10".to_string(), vec![])),
+                    .push(Instr::Call("ins_10".to_string().into(), vec![])),
             }
         } else {
             self.instructions
-                .push(Instr::Call("ins_10".to_string(), vec![]));
+                .push(Instr::Call("ins_10".to_string().into(), vec![]));
         }
     }
 
@@ -185,24 +194,30 @@ impl Sub {
     }
 
     fn resolve_labels(&mut self) {
-        let mut labels = std::collections::HashMap::new();
+        let mut labels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut new_instructions = vec![];
         let mut pos = 0;
         for i in &self.instructions {
             match i {
                 Instr::Label(lbl) => {
-                    labels.insert(lbl.clone(), Expr::Int(pos as i32));
+                    labels.insert(lbl.val().clone(), pos);
                 }
                 _ => new_instructions.push(i.clone()),
             }
             pos += i.size();
         }
+        pos = 0;
         for ni in &mut new_instructions {
             if let Instr::Call(_, v) = ni {
+                let map = labels
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Expr::Int((*v as i32 - pos as i32).into())))
+                    .collect();
                 for e in v.iter_mut() {
-                    e.replace_all_id(&labels);
+                    e.replace_all_id(&map);
                 }
             }
+            pos += ni.size();
         }
         self.instructions = new_instructions;
     }

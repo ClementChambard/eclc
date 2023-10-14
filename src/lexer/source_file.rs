@@ -1,49 +1,64 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Location<'t> {
-    pub src_name: &'t str,
+pub struct Location {
     pub line: usize,
     pub span: std::ops::Range<usize>,
 }
 
-impl<'t> std::fmt::Display for Location<'t> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.src_name, self.line, self.span.start)
+impl Location {
+    pub fn merge(&self, l2: &Location) -> Self {
+        if self.line != l2.line {
+            self.clone()
+        } else {
+            let min = self.span.start.min(l2.span.start);
+            let max = self.span.end.max(l2.span.end);
+            Location {
+                line: self.line,
+                span: min..max,
+            }
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct SourceFile<'t> {
-    pub filename: &'t str,
+impl std::fmt::Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.line, self.span.start)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceFile {
+    pub filename: String,
     pub content: String,
     line_sizes: Vec<usize>,
 }
 
-impl<'t> SourceFile<'t> {
-
+impl SourceFile {
     fn calculate_line_sizes(content: &str) -> Vec<usize> {
         content.split('\n').map(|s| s.len() + 1).collect()
     }
 
-    pub fn open(filename: &'t str) -> Result<Self, std::io::Error> {
+    pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let content = std::fs::read_to_string(filename)?;
         Ok(Self {
-            filename,
+            filename: filename.to_string(),
             line_sizes: Self::calculate_line_sizes(&content),
             content,
         })
     }
 
-    pub fn remaining(&'t self, pos: usize) -> &'t str {
+    pub fn remaining(&self, pos: usize) -> &str {
         &self.content[pos..]
     }
 
-    pub fn span(&'t self, range: std::ops::Range<usize>) -> &'t str {
+    pub fn span(&self, range: std::ops::Range<usize>) -> &str {
         &self.content[range]
     }
 
-    pub fn len(&self) -> usize { self.content.len() }
+    pub fn len(&self) -> usize {
+        self.content.len()
+    }
 
-    pub fn range_to_location(&self, range: std::ops::Range<usize>) -> Location<'t> {
+    pub fn range_to_location(&self, range: std::ops::Range<usize>) -> Location {
         let len = range.end - range.start;
         let mut pos = range.start;
         let mut line = 0;
@@ -56,13 +71,12 @@ impl<'t> SourceFile<'t> {
             }
         }
         Location {
-            src_name: self.filename,
             line,
-            span: pos..pos + len
+            span: pos..pos + len,
         }
     }
 
-    pub fn get_line(&'t self, i: usize) -> &'t str {
+    pub fn get_line(&self, i: usize) -> &str {
         if i > self.line_sizes.len() {
             panic!("Out of range line {i}");
         }
@@ -72,10 +86,10 @@ impl<'t> SourceFile<'t> {
     }
 }
 
-impl<'t> From<&'t str> for SourceFile<'t> {
-    fn from(s: &str) -> SourceFile<'t> {
+impl From<&str> for SourceFile {
+    fn from(s: &str) -> SourceFile {
         SourceFile {
-            filename: "dummy",
+            filename: "dummy".to_owned(),
             content: s.to_owned(),
             line_sizes: Self::calculate_line_sizes(s),
         }

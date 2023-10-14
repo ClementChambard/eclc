@@ -50,6 +50,17 @@ pub fn get_production_table_entry(
     )
 }
 
+pub fn get_production_table_tokens_for_nt<'a>(
+    table: &'a ProductionTable,
+    nt: &str,
+) -> Vec<&'a str> {
+    table
+        .iter()
+        .filter(|entry| entry.nt == nt)
+        .map(|entry| &entry.tok[..])
+        .collect()
+}
+
 use std::io::BufWriter;
 pub fn _gen_rust_for_production_table<W: Write>(
     buf: &mut BufWriter<W>,

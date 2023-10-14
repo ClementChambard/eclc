@@ -41,11 +41,5 @@ pub fn is_ll1_grammar(grammar: &Grammar) -> bool {
         }
     }
 
-    if ll1 {
-        println!("The grammar is LL(1).");
-    } else {
-        println!("The grammar is not LL(1).");
-    }
-
     ll1
 }

@@ -1,4 +1,7 @@
-use crate::error::Error;
+use crate::{
+    error::{report_error, report_error_ext, Error},
+    lexer::Location,
+};
 
 use super::*;
 
@@ -19,13 +22,13 @@ pub struct ExprAnnotation {
 
 #[derive(Debug, Clone, EnumUnwrap)]
 pub enum Expr {
-    Int(i32),
-    Float(f32),
-    Str(String),
+    Int(Located<i32>),
+    Float(Located<f32>),
+    Str(Located<String>),
     Vararg(Vec<Expr>),
-    Id(String),
-    VarInt(i32),
-    VarFloat(f32),
+    Id(Located<String>),
+    VarInt(Located<i32>),
+    VarFloat(Located<f32>),
     Add(Box<Expr>, Box<Expr>, Option<ExprAnnotation>),
     Sub(Box<Expr>, Box<Expr>, Option<ExprAnnotation>),
     Mul(Box<Expr>, Box<Expr>, Option<ExprAnnotation>),
@@ -62,13 +65,17 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int(i + j),
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Float(i + j),
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(i.val() + j.val(), i.loc().merge(j.loc())));
+                    }
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Float(Located::new(i.val() + j.val(), i.loc().merge(j.loc())))
+                    }
                     (Expr::Str(i), Expr::Str(j)) => {
                         *self = Expr::Str({
-                            let mut k = i.clone();
-                            k.push_str(j);
-                            k
+                            let mut k = i.val().clone();
+                            k.push_str(j.val());
+                            Located::new(k, i.loc().merge(j.loc()))
                         })
                     }
                     _ => {}
@@ -78,8 +85,12 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int(i - j),
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Float(i - j),
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(i.val() - j.val(), i.loc().merge(j.loc())))
+                    }
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Float(Located::new(i.val() - j.val(), i.loc().merge(j.loc())))
+                    }
                     _ => {}
                 }
             }
@@ -87,14 +98,18 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int(i * j),
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Float(i * j),
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(i.val() * j.val(), i.loc().merge(j.loc())))
+                    }
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Float(Located::new(i.val() * j.val(), i.loc().merge(j.loc())))
+                    }
                     (Expr::Int(i), Expr::Str(s)) | (Expr::Str(s), Expr::Int(i)) => {
                         let mut new_s = String::new();
-                        for _ in 0..*i {
-                            new_s.push_str(s);
+                        for _ in 0..*i.val() {
+                            new_s.push_str(s.val());
                         }
-                        *self = Expr::Str(new_s)
+                        *self = Expr::Str(Located::new(new_s, s.loc().merge(i.loc())));
                     }
                     _ => {}
                 }
@@ -103,8 +118,12 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int(i / j),
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Float(i / j),
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(i.val() / j.val(), i.loc().merge(j.loc())))
+                    }
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Float(Located::new(i.val() / j.val(), i.loc().merge(j.loc())))
+                    }
                     _ => {}
                 }
             }
@@ -112,49 +131,63 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(i % j);
+                    *self = Expr::Int(Located::new(i.val() % j.val(), i.loc().merge(j.loc())));
                 }
             }
             Self::Uminus(c, _) => {
                 c.constant_fold();
                 match c.as_ref() {
-                    Expr::Int(i) => *self = Expr::Int(-i),
-                    Expr::Float(i) => *self = Expr::Float(-i),
+                    Expr::Int(i) => *self = Expr::Int(Located::new(-i.val(), i.loc().clone())),
+                    Expr::Float(i) => *self = Expr::Float(Located::new(-i.val(), i.loc().clone())),
                     _ => {}
                 }
             }
             Self::Not(c, _) => {
                 c.constant_fold();
                 match c.as_ref() {
-                    Expr::Int(i) => *self = Expr::Int((*i == 0) as i32),
-                    Expr::Float(f) => *self = Expr::Int((*f == 0.) as i32),
+                    Expr::Int(i) => {
+                        *self = Expr::Int(Located::new((*i.val() == 0) as i32, i.loc().clone()))
+                    }
+                    Expr::Float(f) => {
+                        *self = Expr::Int(Located::new((*f.val() == 0.0) as i32, f.loc().clone()))
+                    }
                     _ => {}
                 }
             }
             Self::Sin(e, _) => {
                 e.constant_fold();
                 if let Expr::Float(f) = e.as_ref() {
-                    *self = Expr::Float(f.sin());
+                    *self = Expr::Float(Located::new(f.val().sin(), f.loc().clone()));
                 }
             }
             Self::Cos(e, _) => {
                 e.constant_fold();
                 if let Expr::Float(f) = e.as_ref() {
-                    *self = Expr::Float(f.cos());
+                    *self = Expr::Float(Located::new(f.val().cos(), f.loc().clone()));
                 }
             }
             Self::Sqrt(e, _) => {
                 e.constant_fold();
                 if let Expr::Float(f) = e.as_ref() {
-                    *self = Expr::Float(f.sqrt());
+                    *self = Expr::Float(Located::new(f.val().sqrt(), f.loc().clone()));
                 }
             }
             Self::Gt(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i > *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i > *j) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() > j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() > j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -162,8 +195,18 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i >= *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i >= *j) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() >= j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() >= j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -171,8 +214,18 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i < *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i < *j) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() < j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() < j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -180,8 +233,18 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i <= *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i <= *j) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() <= j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() <= j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -189,9 +252,24 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i == *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i == *j) as i32),
-                    (Expr::Str(s1), Expr::Str(s2)) => *self = Expr::Int((s1 == s2) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() == j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() == j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Str(i), Expr::Str(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() == j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -199,9 +277,24 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 match (l.as_ref(), r.as_ref()) {
-                    (Expr::Float(i), Expr::Float(j)) => *self = Expr::Int((*i != *j) as i32),
-                    (Expr::Int(i), Expr::Int(j)) => *self = Expr::Int((*i != *j) as i32),
-                    (Expr::Str(s1), Expr::Str(s2)) => *self = Expr::Int((s1 != s2) as i32),
+                    (Expr::Float(i), Expr::Float(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() != j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Int(i), Expr::Int(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() != j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
+                    (Expr::Str(i), Expr::Str(j)) => {
+                        *self = Expr::Int(Located::new(
+                            (i.val() != j.val()) as i32,
+                            i.loc().merge(j.loc()),
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -209,35 +302,41 @@ impl Expr {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(*i & *j)
+                    *self = Expr::Int(Located::new(i.val() & j.val(), i.loc().merge(j.loc())))
                 }
             }
             Self::BinOr(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(*i | *j)
+                    *self = Expr::Int(Located::new(i.val() | j.val(), i.loc().merge(j.loc())))
                 }
             }
             Self::Xor(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(*i ^ *j)
+                    *self = Expr::Int(Located::new(i.val() ^ j.val(), i.loc().merge(j.loc())))
                 }
             }
             Self::Or(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(((*i != 0) || (*j != 0)) as i32)
+                    *self = Expr::Int(Located::new(
+                        ((*i.val() != 0) || (*j.val() != 0)) as i32,
+                        i.loc().merge(j.loc()),
+                    ));
                 }
             }
             Self::And(l, r, _) => {
                 l.constant_fold();
                 r.constant_fold();
                 if let (Expr::Int(i), Expr::Int(j)) = (l.as_ref(), r.as_ref()) {
-                    *self = Expr::Int(((*i != 0) && (*j != 0)) as i32)
+                    *self = Expr::Int(Located::new(
+                        ((*i.val() != 0) && (*j.val() != 0)) as i32,
+                        i.loc().merge(j.loc()),
+                    ));
                 }
             }
             Self::Vararg(va) => {
@@ -387,30 +486,38 @@ impl Expr {
         let mut instructions = Vec::new();
         match self {
             Self::Int(_) => {
-                instructions.push(Instr::Call("ins_42".to_string(), vec![self.clone()]));
+                instructions.push(Instr::Call("ins_42".to_string().into(), vec![self.clone()]));
             }
             Self::VarInt(_) => {
-                instructions.push(Instr::Call("ins_42".to_string(), vec![self.clone()]));
+                instructions.push(Instr::Call("ins_42".to_string().into(), vec![self.clone()]));
             }
             Self::Float(_) => {
-                instructions.push(Instr::Call("ins_43".to_string(), vec![self.clone()]));
+                instructions.push(Instr::Call("ins_43".to_string().into(), vec![self.clone()]));
             }
             Self::VarFloat(_) => {
-                instructions.push(Instr::Call("ins_43".to_string(), vec![self.clone()]));
+                instructions.push(Instr::Call("ins_43".to_string().into(), vec![self.clone()]));
             }
             Self::Uminus(e, Some(a)) => {
                 instructions.extend(e.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_83".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_84".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_83".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_84".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't negate a non number"),
                 }
             }
             Self::Not(e, Some(a)) => {
                 instructions.extend(e.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_71".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_72".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_71".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_72".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't not a non number"),
                 }
             }
@@ -418,8 +525,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_50".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_51".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_50".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_51".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't add a non number at runtime"),
                 }
             }
@@ -427,8 +538,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_52".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_53".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_52".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_53".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -436,8 +551,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_54".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_55".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_54".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_55".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -445,8 +564,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_56".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_57".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_56".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_57".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -454,8 +577,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_67".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_68".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_67".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_68".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -463,8 +590,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_69".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_70".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_69".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_70".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -472,8 +603,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_63".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_64".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_63".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_64".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -481,8 +616,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_65".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_66".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_65".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_66".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -490,8 +629,12 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_59".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_60".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_59".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_60".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
@@ -499,55 +642,69 @@ impl Expr {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
                 match a.expr_type {
-                    ExprType::Int => instructions.push(Instr::Call("ins_61".to_string(), vec![])),
-                    ExprType::Float => instructions.push(Instr::Call("ins_62".to_string(), vec![])),
+                    ExprType::Int => {
+                        instructions.push(Instr::Call("ins_61".to_string().into(), vec![]))
+                    }
+                    ExprType::Float => {
+                        instructions.push(Instr::Call("ins_62".to_string().into(), vec![]))
+                    }
                     _ => panic!("Can't subtract a non number"),
                 }
             }
             Self::Modulo(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_58".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_58".to_string().into(), vec![]));
             }
             Self::BinAnd(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_77".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_77".to_string().into(), vec![]));
             }
             Self::Xor(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_75".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_75".to_string().into(), vec![]));
             }
             Self::BinOr(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_76".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_76".to_string().into(), vec![]));
             }
             Self::Or(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_73".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_73".to_string().into(), vec![]));
             }
             Self::And(e1, e2, Some(_)) => {
                 instructions.extend(e1.instructions()?);
                 instructions.extend(e2.instructions()?);
-                instructions.push(Instr::Call("ins_74".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_74".to_string().into(), vec![]));
             }
             Self::Sin(e, Some(_)) => {
                 instructions.extend(e.instructions()?);
-                instructions.push(Instr::Call("ins_79".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_79".to_string().into(), vec![]));
             }
             Self::Cos(e, Some(_)) => {
                 instructions.extend(e.instructions()?);
-                instructions.push(Instr::Call("ins_80".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_80".to_string().into(), vec![]));
             }
             Self::Sqrt(e, Some(_)) => {
                 instructions.extend(e.instructions()?);
-                instructions.push(Instr::Call("ins_88".to_string(), vec![]));
+                instructions.push(Instr::Call("ins_88".to_string().into(), vec![]));
             }
-            Self::Id(i) => panic!("Unresolved identifier {i}"),
-            Self::Str(_) => panic!("Can't push a string on the stack"),
+            Self::Id(i) => {
+                report_error_ext(
+                    i.loc(),
+                    &format!("Unresolved identifier `{}`", i.val()),
+                    "Unresolved identifier",
+                );
+                panic!("");
+            }
+            Self::Str(s) => {
+                report_error(s.loc(), "Can't push a string on the stack");
+                panic!("");
+            }
             Self::Vararg(_) => panic!("Can't push a vararg on the stack"),
             _ => panic!(
                 "Trying to generate instruction for non typed expression {:?}",
@@ -561,10 +718,45 @@ impl Expr {
         matches!(self, Self::VarInt(_) | Self::VarFloat(_))
     }
 
+    pub fn _loc(&self) -> Location {
+        match self {
+            Self::Add(a, b, _)
+            | Self::Sub(a, b, _)
+            | Self::Mul(a, b, _)
+            | Self::Div(a, b, _)
+            | Self::Ne(a, b, _)
+            | Self::Eq(a, b, _)
+            | Self::Gt(a, b, _)
+            | Self::Ge(a, b, _)
+            | Self::Lt(a, b, _)
+            | Self::Le(a, b, _)
+            | Self::BinOr(a, b, _)
+            | Self::BinAnd(a, b, _)
+            | Self::Xor(a, b, _)
+            | Self::Or(a, b, _)
+            | Self::And(a, b, _)
+            | Self::Modulo(a, b, _) => a._loc().merge(&b._loc()),
+            Self::Uminus(a, _)
+            | Self::Not(a, _)
+            | Self::Sin(a, _)
+            | Self::Cos(a, _)
+            | Self::Sqrt(a, _) => a._loc(),
+            Self::Id(a) => a.loc().clone(),
+            Self::Int(a) => a.loc().clone(),
+            Self::VarInt(a) => a.loc().clone(),
+            Self::Float(a) => a.loc().clone(),
+            Self::VarFloat(a) => a.loc().clone(),
+            Self::Str(a) => a.loc().clone(),
+            Self::Vararg(_) => {
+                panic!("");
+            }
+        }
+    }
+
     pub fn replace_id(&mut self, id: &str, to: &Expr) {
         match self {
             Self::Id(s) => {
-                if s == id {
+                if s.val() == id {
                     *self = to.clone();
                 }
             }
@@ -639,26 +831,26 @@ fn resolve_expr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
                 args[0]
                     .clone()
                     .token_or(Error::Grammar("Expr::Int takes an int".to_owned()))?
-                    .int_or(Error::Grammar("Expr::Int takes an int".to_owned()))?,
+                    .int_loc_or(Error::Grammar("Expr::Int takes an int".to_owned()))?,
             )
         }
         "Float" => {
             if args.len() != 1 {
                 return Err(Error::Grammar("Expr::Float takes 1 param".to_owned()));
             }
-            E::Float(args[0].clone().token().float())
+            E::Float(args[0].clone().token().float_loc())
         }
         "Str" => {
             if args.len() != 1 {
                 return Err(Error::Grammar("Expr::Str takes 1 param".to_owned()));
             }
-            E::Str(args[0].clone().token().strn())
+            E::Str(args[0].clone().token().strn_loc())
         }
         "Id" => {
             if args.len() != 1 {
                 return Err(Error::Grammar("Expr::Id takes 2 param".to_owned()));
             }
-            E::Id(args[0].clone().token().id())
+            E::Id(args[0].clone().token().id_loc())
         }
         "Add" => {
             if args.len() != 2 {
@@ -861,7 +1053,7 @@ fn resolve_expr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
                     if children.len() != 1 {
                         return Err(Error::ShouldNeverBeThere);
                     }
-                    E::VarInt(children[0].clone().token().int_or(Error::Grammar(
+                    E::VarInt(children[0].clone().token().int_loc_or(Error::Grammar(
                         "Arg to VarExpr::Int should be an int".to_owned(),
                     ))?)
                 }
@@ -869,7 +1061,7 @@ fn resolve_expr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
                     if children.len() != 1 {
                         return Err(Error::ShouldNeverBeThere);
                     }
-                    E::VarFloat(children[0].clone().token().float_or(Error::Grammar(
+                    E::VarFloat(children[0].clone().token().float_loc_or(Error::Grammar(
                         "Arg to VarExpr::Float should be a float".to_owned(),
                     ))?)
                 }
@@ -923,7 +1115,7 @@ fn resolve_varexpr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
             let int = -args[0].clone().token().int_or(Error::Grammar(
                 "Param to MInt should be an integer".to_owned(),
             ))?;
-            let int = AstNode::Token(Token::Int(int));
+            let int = AstNode::Token(Token::Int(int, args[0].clone().token().loc().clone()));
             AstNode::Data {
                 dtype: "VarExpr::Int".to_string(),
                 children: vec![int],
@@ -938,7 +1130,7 @@ fn resolve_varexpr(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
             let float = -args[0].clone().token().float_or(Error::Grammar(
                 "Param to MInt should be an float".to_owned(),
             ))?;
-            let float = AstNode::Token(Token::Float(float));
+            let float = AstNode::Token(Token::Float(float, args[0].clone().token().loc().clone()));
             AstNode::Data {
                 dtype: "VarExpr::Float".to_string(),
                 children: vec![float],

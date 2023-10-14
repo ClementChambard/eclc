@@ -5,30 +5,28 @@ use super::SourceFile;
 use super::Token;
 
 #[derive(Debug)]
-pub struct Tokens<'l, 't, K> {
+pub struct Tokens<'l, K> {
     lexer: &'l Lexer<K>,
-    source: &'t SourceFile<'t>,
+    source: SourceFile,
     position: usize,
     eof: bool,
 }
 
-impl<'l, 't, K> Tokens<'l, 't, K> {
-    pub fn new(lexer: &'l Lexer<K>, source: &'t SourceFile) -> Self {
+impl<'l, K> Tokens<'l, K> {
+    pub fn new(lexer: &'l Lexer<K>, source: &SourceFile) -> Self {
         Self {
             lexer,
-            source,
+            source: source.clone(),
             position: 0,
             eof: false,
         }
     }
-
-    pub fn get_sourcefile(&self) -> &SourceFile { self.source }
 }
 
-impl<'l, 't, K: Copy> Iterator for Tokens<'l, 't, K> {
-    type Item = Token<'t, K>;
+impl<'l, K: Copy> Iterator for Tokens<'l, K> {
+    type Item = Token<K>;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Token<K>> {
         loop {
             if self.eof {
                 return None;
@@ -38,7 +36,7 @@ impl<'l, 't, K: Copy> Iterator for Tokens<'l, 't, K> {
                 return Some(Token {
                     kind: self.lexer.eof_token()?,
                     loc: self.source.range_to_location(self.position..self.position),
-                    text: "",
+                    text: "".to_owned(),
                 });
             }
 
@@ -55,21 +53,27 @@ impl<'l, 't, K: Copy> Iterator for Tokens<'l, 't, K> {
             let (len, i) = if let Some((a, b)) = result {
                 (a, b)
             } else {
-                report_error(&Token {
-                        kind: "",
-                        loc: self.source.range_to_location(self.position..self.position + 1),
-                        text: ""
-                    },
-                    self.source, &format!("unknown symbol \"{}\": ignoring character.", &string[0..1]));
+                report_error(
+                    &self
+                        .source
+                        .range_to_location(self.position..self.position + 1),
+                    &format!("unknown symbol `{}`: ignoring character.", &string[0..1]),
+                );
                 self.position += 1;
                 return self.next();
             };
-            
-            let loc = self.source.range_to_location(self.position..self.position + len);
-            let text = &self.source.span(self.position..self.position + len);
+
+            let loc = self
+                .source
+                .range_to_location(self.position..self.position + len);
+            let text = self.source.span(self.position..self.position + len);
             self.position += len;
             if let Some(kind) = self.lexer.kind(i) {
-                return Some(Token { kind, loc, text});
+                return Some(Token {
+                    kind,
+                    loc,
+                    text: text.to_string(),
+                });
             }
         }
     }

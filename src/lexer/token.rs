@@ -1,13 +1,13 @@
 use super::source_file::Location;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Token<'t, K> {
+pub struct Token<K> {
     pub kind: K,
-    pub loc: Location<'t>,
-    pub text: &'t str,
+    pub loc: Location,
+    pub text: String,
 }
 
-impl<'t, K: std::fmt::Display> std::fmt::Display for Token<'t, K> {
+impl<K: std::fmt::Display> std::fmt::Display for Token<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {} {}", self.loc, self.kind, self.text)
     }

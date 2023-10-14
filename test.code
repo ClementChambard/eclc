@@ -1,20 +1,8 @@
-/*
-ecli {}
-anmi {}
-
-sub sub1(int a) {
-}
-
-sub sub2() {
-    @sub1(10);
-    spell(1000, 1000, 1000, "");
-}
-
-/*/
 ecli {}
 anmi { "enemy.anm", "st01enm.anm" }
 
 sub GirlR0() {
+    push();
     setHurtbox(2.f, 2.f);
     etNew(0);
     etNew(1);
@@ -72,5 +60,3 @@ sub shoot(int count1, int count2) {
     etOn(0);
     etOn(1);
 }
-
-//*/

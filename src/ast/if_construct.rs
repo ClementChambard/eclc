@@ -54,7 +54,7 @@ pub fn desugar(
     }
     if e.is_primitive() && !e.is_var() {
         let i = e.int();
-        if i != 0 {
+        if *i.val() != 0 {
             new_instructions.extend(if_bloc);
         } else {
             new_instructions.extend(else_bloc);
@@ -64,27 +64,27 @@ pub fn desugar(
     new_instructions.push(Instr::PushExpr(cond.clone()));
     let else_label = sub.gen_label(lbl_seed);
     new_instructions.push(Instr::Call(
-        "ins_14".to_string(),
+        "ins_14".to_string().into(),
         vec![
-            Expr::Id(else_label.clone()),
-            Expr::Float(0.), // TODO: should not be 0 but the time of the if
+            Expr::Id(else_label.clone().into()),
+            Expr::Float(0.0.into()), // TODO: should not be 0 but the time of the if
         ],
     ));
     new_instructions.extend(if_bloc);
     if else_bloc_empty {
-        new_instructions.push(Instr::Label(else_label));
+        new_instructions.push(Instr::Label(else_label.into()));
     } else {
         let endif_label = sub.gen_label(lbl_seed);
         new_instructions.push(Instr::Call(
-            "ins_12".to_string(),
+            "ins_12".to_string().into(),
             vec![
-                Expr::Id(endif_label.clone()),
-                Expr::Float(0.), // TODO: should be the time of last if_bloc instruction
+                Expr::Id(endif_label.clone().into()),
+                Expr::Float(0.0.into()), // TODO: should be the time of last if_bloc instruction
             ],
         ));
-        new_instructions.push(Instr::Label(else_label));
+        new_instructions.push(Instr::Label(else_label.into()));
         new_instructions.extend(else_bloc);
-        new_instructions.push(Instr::Label(endif_label));
+        new_instructions.push(Instr::Label(endif_label.into()));
     }
     Ok(new_instructions)
 }
