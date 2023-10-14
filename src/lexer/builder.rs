@@ -1,13 +1,14 @@
 use super::Lexer;
 
-use regex::{Regex, RegexSet};
 pub use regex::Error;
+use regex::{Regex, RegexSet};
 
 pub struct LexerBuilder<'r, K> {
     regexes: Vec<&'r str>,
     kinds: Vec<Option<K>>,
     escape: Vec<bool>,
     eof: Option<K>,
+    error: Option<K>,
 }
 
 impl<'r, K: Copy> Default for LexerBuilder<'r, K> {
@@ -23,6 +24,7 @@ impl<'r, K: Copy> LexerBuilder<'r, K> {
             kinds: Vec::new(),
             escape: Vec::new(),
             eof: None,
+            error: None,
         }
     }
 
@@ -45,13 +47,19 @@ impl<'r, K: Copy> LexerBuilder<'r, K> {
         self
     }
 
+    pub fn error(mut self, kind: K) -> Self {
+        self.error = Some(kind);
+        self
+    }
+
     pub fn build(self) -> Result<Lexer<K>, Error> {
-        let regexes = self.regexes.into_iter().zip(self.escape)
-            .map(|(r, e)| if e {
-                    format!("^{}", &regex::escape(r))
-                } else {
-                    format!("^{}", r)
-                });
+        let regexes = self.regexes.into_iter().zip(self.escape).map(|(r, e)| {
+            if e {
+                format!("^{}", &regex::escape(r))
+            } else {
+                format!("^{}", r)
+            }
+        });
 
         let regex_set = RegexSet::new(regexes)?;
         let mut regexes = Vec::new();
@@ -59,7 +67,12 @@ impl<'r, K: Copy> LexerBuilder<'r, K> {
             regexes.push(Regex::new(pattern)?);
         }
 
-        Ok(Lexer::new(self.kinds, regexes, regex_set, self.eof))
+        Ok(Lexer::new(
+            self.kinds,
+            regexes,
+            regex_set,
+            self.eof,
+            self.error.unwrap(),
+        ))
     }
 }
-

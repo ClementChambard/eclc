@@ -27,6 +27,10 @@ pub fn parse<'a>(grammar: &Grammar, tokens: Tokens<'a, &str>, first_nt: &str) ->
     while !symbols_to_derive.is_empty() {
         let Some(ref cur_token) = cur_token_opt else { break; };
         let s = &symbols_to_derive[0];
+        if cur_token.kind == "ERROR" {
+            // report_error(&cur_token.loc, "Couldn't continue parsing at unknown token");
+            return None;
+        }
         match s {
             Symbol::NT(nt) => {
                 if let Some(parsing_table_entry) =
@@ -103,11 +107,5 @@ pub fn parse<'a>(grammar: &Grammar, tokens: Tokens<'a, &str>, first_nt: &str) ->
             }
         }
     }
-    if symbols_to_derive.is_empty() {
-        println!("Parsed successfully");
-        ret
-    } else {
-        println!("Parsing early exit");
-        ret
-    }
+    ret
 }

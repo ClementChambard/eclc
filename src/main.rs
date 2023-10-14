@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use crossterm::style::Stylize;
 use std::{io::Write, sync::Mutex};
 
 mod ast;
@@ -14,7 +15,7 @@ mod parser;
 mod print_bytes;
 
 use ast::AstNode;
-use error::Error;
+use error::{report_error_simple, Error};
 use grammar::Grammar;
 use lexer::{Lexer, SourceFile};
 use parser::ast::AstResolver;
@@ -52,15 +53,15 @@ fn gen_file(
             &[],
         )?
         .ecl();
-    println!("{:#?}", node);
+    // println!("{:#?}", node);
 
     // Process code for binary generation
     node.process()?;
-    println!("{:#?}", node);
+    // println!("{:#?}", node);
 
     // generate binary
     let bytes = code_gen::generate(&node);
-    print_bytes::pr(&bytes);
+    // print_bytes::pr(&bytes);
     std::fs::File::create("out.ecl")
         .map_err(Error::IO)?
         .write_all(&bytes)
@@ -86,7 +87,27 @@ fn main_sub() -> Result<(), Error> {
     ast_resolver.set_ast_prod(grammar.get_ast_prod());
     ast::fill_executor(&mut ast_resolver);
 
-    gen_file("test.code", &lexer, &grammar, &ast_resolver)?;
+    let src_name = "test.code";
+    let bin_name = "out.ecl";
+
+    println!(
+        "   {} `{}` from source `{}`",
+        "Compiling".bold().with(crossterm::style::Color::Green),
+        bin_name,
+        src_name
+    );
+    if let Err(_) = gen_file(src_name, &lexer, &grammar, &ast_resolver) {
+        report_error_simple(&format!(
+            "could not compile `{}` (bin \"{}\") due to previous error",
+            src_name, bin_name
+        ));
+    } else {
+        println!(
+            "    {} building `{}`",
+            "Finished".bold().with(crossterm::style::Color::Green),
+            bin_name
+        );
+    }
 
     Ok(())
 }

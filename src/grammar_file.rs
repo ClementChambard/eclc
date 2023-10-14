@@ -264,6 +264,7 @@ impl GrammarFile {
             };
             lb = lb.token(re, &t.in_file[..], t.escape);
         }
+        lb = lb.error("ERROR");
         for i in &self.ignore_decls {
             lb = lb.ignore(&i[..]);
         }

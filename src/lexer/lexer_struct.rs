@@ -9,6 +9,7 @@ pub struct Lexer<K> {
     regexes: Vec<Regex>,
     regex_set: RegexSet,
     eof: Option<K>,
+    error: K,
 }
 
 impl<K: Copy> Lexer<K> {
@@ -17,17 +18,22 @@ impl<K: Copy> Lexer<K> {
         regexes: Vec<Regex>,
         regex_set: RegexSet,
         eof: Option<K>,
+        error: K,
     ) -> Self {
         Self {
             kinds,
             regexes,
             regex_set,
             eof,
+            error,
         }
     }
 
     pub fn eof_token(&self) -> Option<K> {
         self.eof
+    }
+    pub fn error(&self) -> K {
+        self.error.clone()
     }
     pub fn get_regexes(&self) -> &Vec<Regex> {
         &self.regexes

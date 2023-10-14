@@ -53,14 +53,16 @@ impl<'l, K: Copy> Iterator for Tokens<'l, K> {
             let (len, i) = if let Some((a, b)) = result {
                 (a, b)
             } else {
-                report_error(
-                    &self
-                        .source
-                        .range_to_location(self.position..self.position + 1),
-                    &format!("unknown symbol `{}`: ignoring character.", &string[0..1]),
-                );
+                let loc = self
+                    .source
+                    .range_to_location(self.position..self.position + 1);
+                report_error(&loc, &format!("unknown start of token: {}", &string[0..1]));
                 self.position += 1;
-                return self.next();
+                return Some(Token {
+                    kind: self.lexer.error(),
+                    loc,
+                    text: string[0..1].to_string(),
+                });
             };
 
             let loc = self

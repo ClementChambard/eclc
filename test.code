@@ -2,7 +2,6 @@ ecli {}
 anmi { "enemy.anm", "st01enm.anm" }
 
 sub GirlR0() {
-    push();
     setHurtbox(2.f, 2.f);
     etNew(0);
     etNew(1);

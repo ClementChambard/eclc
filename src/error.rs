@@ -175,7 +175,7 @@ pub fn report_error_ext_one_more(loc: &Location, text: &str, under_text: &str) {
 pub fn report_error_ext(loc: &Location, text: &str, under_text: &str) {
     report_message_header(loc, text, "error", crossterm::style::Color::DarkRed, true);
     let report_content = create_report_content(
-        loc.line..loc.line + 2,
+        loc.line..loc.line + 1,
         vec![ErrReport {
             line: loc.line,
             span: loc.span.clone(),
@@ -206,11 +206,18 @@ pub fn report_error(loc: &Location, text: &str) {
     println!("{}", report_content);
 }
 
+pub fn report_error_simple(text: &str) {
+    println!(
+        "{}: {}",
+        "error".bold().with(crossterm::style::Color::DarkRed),
+        text
+    );
+}
+
 pub fn report_note_simple(text: &str) {
     println!(
-        "{}{} {}",
+        "{}: {}",
         "note".bold().with(crossterm::style::Color::Blue),
-        ":".bold(),
-        text.bold()
+        text
     );
 }
