@@ -21,6 +21,15 @@ impl<T: Clone> Located<T> {
     pub fn into_val(self) -> T {
         self.0
     }
+
+    pub fn relocate(&self, l: Location) -> Self {
+        Self(self.0, l)
+    }
+
+    pub fn relocate_into(mut self, l: Location) -> Self {
+        self.1 = l;
+        self
+    }
 }
 
 impl<T: Clone + Add<Output = T>> Add for Located<T> {

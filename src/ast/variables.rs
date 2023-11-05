@@ -1,18 +1,31 @@
-use crate::error::Error;
+use crate::{
+    error::{
+        create_report_content, report_error_ext, report_error_ext_one_more, report_message_header,
+        ErrReport, Error,
+    },
+    lexer::Location,
+};
 
 use super::*;
 
 #[derive(Clone)]
 pub enum Variable {
-    Int(i32, String),
-    Float(f32, String),
+    Int(i32, Located<String>),
+    Float(f32, Located<String>),
 }
 
 impl Variable {
     pub fn name(&self) -> &str {
         match self {
-            Self::Int(_, s) => s,
-            Self::Float(_, s) => s,
+            Self::Int(_, s) => s.val(),
+            Self::Float(_, s) => s.val(),
+        }
+    }
+
+    pub fn loc(&self) -> &Location {
+        match self {
+            Self::Int(_, s) => s.loc(),
+            Self::Float(_, s) => s.loc(),
         }
     }
 
@@ -70,28 +83,65 @@ impl Scope {
         Ok(s)
     }
 
-    pub fn add_var(&mut self, v: &str, int_1_float_2: i8) -> Result<(), Error> {
+    pub fn add_var(&mut self, v: &Located<String>, int_1_float_2: i8) -> Result<(), Error> {
         let o = self.local_max_offset;
         self.local_max_offset += 4;
         if self.local_max_offset > self.max_offset {
             self.max_offset = self.local_max_offset;
         }
         let var = if int_1_float_2 == 1 {
-            Variable::Int(o, v.to_string())
+            Variable::Int(o, v.clone())
         } else {
-            Variable::Float(o as f32, v.to_string())
+            Variable::Float(o as f32, v.clone())
         };
-        if self.variables.iter().any(|va| va.name() == v) {
-            return Err(Error::Simple(format!("Variable {v} already exists")));
+        if let Some(other) = self.variables.iter().find(|va| va.name() == v.val()) {
+            report_error_ext_one_more(
+                v.loc(),
+                &format!("Variable `{}` already exists", v.val()),
+                "Variable already exists",
+            );
+            report_message_header(
+                other.loc(),
+                "Variable defined here:",
+                "note",
+                crossterm::style::Color::Blue,
+                false,
+            );
+            println!(
+                "{}",
+                create_report_content(
+                    other.loc().line..other.loc().line + 1,
+                    vec![ErrReport {
+                        line: other.loc().line,
+                        span: other.loc().span.clone(),
+                        col: crossterm::style::Color::Blue,
+                        msg: "",
+                        underline: '~',
+                        col_text: true,
+                    }],
+                    false,
+                )
+            );
+            return Err(Error::Simple(format!("Variable already exists")));
         }
         self.variables.push(var);
         Ok(())
     }
 
-    pub fn assign(&self, v: &str, expr: &Expr) -> Result<Vec<Instr>, Error> {
-        let var = self.get_var(v).ok_or(Error::Simple(format!(
-            "Variable {v} doesn't exist for assignment"
-        )))?;
+    pub fn assign(&self, v: &Located<String>, expr: &Expr) -> Result<Vec<Instr>, Error> {
+        let var = match self.get_var(v.val()) {
+            Some(v) => v,
+            None => {
+                report_error_ext(
+                    v.loc(),
+                    &format!("Variable `{}` doesn't exist", v.val()),
+                    "Variable doesn't exist",
+                );
+                return Err(Error::Simple(format!(
+                    "Variable doesn't exist for assignment"
+                )));
+            }
+        };
         Ok(vec![Instr::PushExpr(expr.clone()), var.pop_instr()])
     }
 
@@ -213,26 +263,26 @@ pub fn replace_in_bloc(scope: &mut Scope, ins: &Vec<Instr>) -> Result<Vec<Instr>
             Instr::Affect(v, e) => {
                 let mut new_e = e.clone();
                 replace_in_expr(scope, &mut new_e);
-                new_ins.extend(scope.assign(v.val(), &new_e)?);
+                new_ins.extend(scope.assign(v, &new_e)?);
             }
             Instr::VarInt(v, e_opt) => {
-                scope.add_var(v.val(), 1)?;
+                scope.add_var(v, 1)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v.val(), &new_e)?);
+                        new_ins.extend(scope.assign(v, &new_e)?);
                     }
                     None => {}
                 }
             }
             Instr::VarFloat(v, e_opt) => {
-                scope.add_var(v.val(), 2)?;
+                scope.add_var(v, 2)?;
                 match e_opt {
                     Some(e) => {
                         let mut new_e = e.clone();
                         replace_in_expr(scope, &mut new_e);
-                        new_ins.extend(scope.assign(v.val(), &new_e)?);
+                        new_ins.extend(scope.assign(v, &new_e)?);
                     }
                     None => {}
                 }

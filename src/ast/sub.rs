@@ -9,8 +9,8 @@ use magic_unwrapper::EnumUnwrap;
 
 #[derive(Debug, Clone, EnumUnwrap)]
 pub enum Param {
-    Int(String),
-    Float(String),
+    Int(Located<String>),
+    Float(Located<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -234,8 +234,8 @@ fn resolve_param(typ: &[String], args: &[AstNode]) -> Result<AstNode, Error> {
     }
     let typ = &typ[0];
     Ok(AstNode::Param(match &typ[..] {
-        "Int" => Param::Int(args[0].clone().token().id()),
-        "Float" => Param::Float(args[0].clone().token().id()),
+        "Int" => Param::Int(args[0].clone().token().id_loc()),
+        "Float" => Param::Float(args[0].clone().token().id_loc()),
         _ => {
             return Err(Error::Grammar(format!(
                 "Unknown Param subcommand {}",

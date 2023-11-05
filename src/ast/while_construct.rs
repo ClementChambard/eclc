@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{report_error_ext, Error};
 
 use super::*;
 
@@ -29,6 +29,11 @@ pub fn desugar(
     e.anotate()?;
     e.constant_fold();
     if e.get_type()? != ExprType::Int {
+        report_error_ext(
+            &e.loc(),
+            "Condition expression should be of type int",
+            "This expression should have type int",
+        );
         return Err(Error::Simple(
             "Condition for while should be type Int".to_owned(),
         ));

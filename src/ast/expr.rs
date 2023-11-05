@@ -718,7 +718,7 @@ impl Expr {
         matches!(self, Self::VarInt(_) | Self::VarFloat(_))
     }
 
-    pub fn _loc(&self) -> Location {
+    pub fn loc(&self) -> Location {
         match self {
             Self::Add(a, b, _)
             | Self::Sub(a, b, _)
@@ -735,12 +735,12 @@ impl Expr {
             | Self::Xor(a, b, _)
             | Self::Or(a, b, _)
             | Self::And(a, b, _)
-            | Self::Modulo(a, b, _) => a._loc().merge(&b._loc()),
+            | Self::Modulo(a, b, _) => a.loc().merge(&b.loc()),
             Self::Uminus(a, _)
             | Self::Not(a, _)
             | Self::Sin(a, _)
             | Self::Cos(a, _)
-            | Self::Sqrt(a, _) => a._loc(),
+            | Self::Sqrt(a, _) => a.loc(),
             Self::Id(a) => a.loc().clone(),
             Self::Int(a) => a.loc().clone(),
             Self::VarInt(a) => a.loc().clone(),
@@ -750,6 +750,18 @@ impl Expr {
             Self::Vararg(_) => {
                 panic!("");
             }
+        }
+    }
+
+    pub fn relocate(&self, loc: &Location) -> Self {
+        match self {
+            Self::Id(a) => Self::Id(a.relocate(loc.clone())),
+            Self::Int(a) => Self::Id(a.relocate(loc.clone())),
+            Self::VarInt(a) => Self::Id(a.relocate(loc.clone())),
+            Self::Float(a) => Self::Id(a.relocate(loc.clone())),
+            Self::VarFloat(a) => Self::Id(a.relocate(loc.clone())),
+            Self::Str(a) => Self::Id(a.relocate(loc.clone())),
+            _ => self.clone(),
         }
     }
 
