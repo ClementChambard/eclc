@@ -23,7 +23,7 @@ impl<T: Clone> Located<T> {
     }
 
     pub fn relocate(&self, l: Location) -> Self {
-        Self(self.0, l)
+        Self(self.0.clone(), l)
     }
 
     pub fn relocate_into(mut self, l: Location) -> Self {

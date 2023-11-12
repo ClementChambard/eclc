@@ -756,10 +756,10 @@ impl Expr {
     pub fn relocate(&self, loc: &Location) -> Self {
         match self {
             Self::Id(a) => Self::Id(a.relocate(loc.clone())),
-            Self::Int(a) => Self::Id(a.relocate(loc.clone())),
-            Self::VarInt(a) => Self::Id(a.relocate(loc.clone())),
-            Self::Float(a) => Self::Id(a.relocate(loc.clone())),
-            Self::VarFloat(a) => Self::Id(a.relocate(loc.clone())),
+            Self::Int(a) => Self::Int(a.relocate(loc.clone())),
+            Self::VarInt(a) => Self::VarInt(a.relocate(loc.clone())),
+            Self::Float(a) => Self::Float(a.relocate(loc.clone())),
+            Self::VarFloat(a) => Self::VarFloat(a.relocate(loc.clone())),
             Self::Str(a) => Self::Id(a.relocate(loc.clone())),
             _ => self.clone(),
         }
